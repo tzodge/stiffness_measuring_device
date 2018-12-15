@@ -1,0 +1,22 @@
+clc ;
+clear;
+fig = figure;
+fig.Units = 'centimeters';
+fig.PaperType = 'usletter';
+pgon = polyshape([0 0 1 1].*10,[1 0 0 1].*10);
+hold all
+
+set(gca,'units','centimeters')
+set(gca,'xlimmode','manual','ylimmode','manual')
+axpos = get(gca,'position');
+% axpos = [-1,-1,0,0];
+set(gca,'position',[0 0 10  10])
+
+axis equal
+plot(pgon);
+
+plot([1,1],[1,2],'');
+print('FillPageFigure','-dpdf')
+
+
+

@@ -1,0 +1,21 @@
+
+
+Use the following commands in a terminal if it shows error
+"gurobi.sh not found"  when you run gurobi.sh
+>> cd /opt/gurobi752/linux64
+
+
+#>> export GUROBI_HOME="/opt/gurobi752/linux64"
+#>> export PATH="${PATH}:${GUROBI_HOME}/bin"
+#>> export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${GUROBI_HOME}/lib"
+
+then 
+>> gurobi.sh 
+sould open a gurobi shell
+
+you will have to operate in the same terminal to run a
+gurobi program
+
+>> cd  /home/biorobotics/cpp_test/newLibTest 
+
+

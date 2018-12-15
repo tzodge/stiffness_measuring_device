@@ -1,0 +1,8 @@
+PoseVidAruco will give you the pose of the aruco marker with specified ID. It won't "plot" it realtime since rendering is really slow in matplotlib, but you can use this info to plot after the data is recorded.
+
+
+calibration file : B4Aruco.npz
+standard deviations for stationary marker in mm
+x : 0.07757431470047596
+y : 0.07169149072375049
+z : 0.6370108955709782
