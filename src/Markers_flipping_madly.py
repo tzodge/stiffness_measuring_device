@@ -5,11 +5,11 @@ Created on Tue Jan 15 15:43:27 2019
 @author: arkad
 """
 
+
 #Used this code to confirm that the tvec and rvec given by the 
  # estimatePoseSingleMarkers is of the marker frame wrt the camera frame
 
 
-from __future__ import print_function, division
 import numpy as np
 from numpy import linalg as LA
 import cv2
@@ -24,34 +24,6 @@ from scipy.optimize import minimize, leastsq
 from scipy import linalg
 # from sklearn.preprocessing import normalize
 #import numdifftools as nd
-# from Pt_grey_roscam import *
-
-import roslib
-# roslib.load_manifest('my_package')
-import sys
-import rospy
-import cv2
-from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
-import time
-
-# class image_converter:
-	# def __init__(self):
-	# 	# self.image_pub = rospy.Publisher("image_topic_2",Image)
-	# 	self.image_sub = rospy.Subscriber("/camera/image_color",Image,self.callback)
-
-def get_frame():
-	frame = rospy.wait_for_message("/camera/image_color", Image, 5 )
-	return frame
-
-def run():
-	# ic = image_converter()
-	rospy.init_node('image_converter', anonymous=True)
-	bridge = CvBridge()
-	frame = get_frame()
-	img = bridge.imgmsg_to_cv2(frame, "bgr8")
-	return img
 
 ### functions ##
 ###Drawing functions 
@@ -557,15 +529,15 @@ n_points_per_marker = 15
 # b9_wrt_obj =  tf_8_9.dot(b9_native)
 
 
-with np.load('PTGREY.npz') as X:
+with np.load('HD920.npz') as X:
     mtx, dist = [X[i] for i in ('mtx','dist')] 
     
 R_cent_face = np.load('Center_face_rotations.npy')
 T_cent_face = np.load('Center_face_translations.npy')
 
-# cap = cv2.VideoCapture(0)
-# ret = cap.set(3,1000)
-# ret = cap.set(4,1000)
+cap = cv2.VideoCapture(0)
+ret = cap.set(3,1000)
+ret = cap.set(4,1000)
 
 pose_marker_with_APE= np.zeros((iterations_for_while,6))
 pose_marker_with_DPR= np.zeros((iterations_for_while,6))
@@ -594,26 +566,22 @@ time_vect = [0]*iterations_for_while
 #frame_color = frame
 #frame_gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 #frame = frame_gray
-cv2.namedWindow('image',cv2.WINDOW_NORMAL)
+
 while(j<iterations_for_while):
     
     # # Capture frame-by-frame
     
-    # ret, frame = cap.read()
-    # frame_color = frame
-
-    frame = run()
-    cv2.imshow("image",frame)
-
+    ret, frame = cap.read()
+    frame_color = frame
     # frame = frame/255
-    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # frame = frame_gray
     
     # # analyze with one image
     
     # frame = cv2.imread('opencv_frame_2.jpg')
     
-    # frame = cv2.imread('synthetic_img.jpg')cd 
+    # frame = cv2.imread('synthetic_img.jpg')
     # # dist = np.zeros((1,5))  # only to be used for the synthetic image
     # # mtx = np.eye(3)     # only to be used for the synthetic image
     
@@ -625,7 +593,7 @@ while(j<iterations_for_while):
     corners, ids, rejectedImgPoints = aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
     current_marker_1 = 4
     current_marker_2 = 8
-#     # the first row will allways be [0,0,0] this is to ensure that we can start from face 1 which is actually face 0
+    # the first row will allways be [0,0,0] this is to ensure that we can start from face 1 which is actually face 0
     rvecs = np.zeros((13,1,3))
     tvecs = np.zeros((13,1,3))
     print(ids,"ids")
@@ -650,10 +618,10 @@ while(j<iterations_for_while):
             temp2 = int(px_sp[0,0,1])
             cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
             cent_prev = cent_in_R3
-# ####imaging
+####imaging
         print (j)
         j = j+1
-        cv2.imshow('frame',frame)
+        # cv2.imshow('frame',frame)
         cv2.imshow('frame_color',frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
@@ -665,72 +633,70 @@ while(j<iterations_for_while):
             break
 
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        cv2.destroyAllWindows()
-        break
+# cv2.destroyAllWindows()
 
 
 
-# #### Analysis
+#### Analysis
 
 
-# pose_marker_with_APE= pose_marker_with_APE[0:j,:]
+pose_marker_with_APE= pose_marker_with_APE[0:j,:]
 
-# pose_marker_with_DPR= pose_marker_with_DPR[0:j,:]
-# pose_marker_without_opt = pose_marker_without_opt[0:j,:]
-# #pose_marker_avg = pose_marker_avg[0:j,:]
-# tip_posit = tip_posit[0:j,:]
-
-
-
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection="3d")
-
-# ax.set_xlabel('X Label')
-# ax.set_ylabel('Y Label')
-# ax.set_zlabel('Z Label')
-
-# if detect_tip_switch == 1:
-# #    print (np.std(tip_posit,axis=0), "std in x,y,z")
-#     ax.scatter(tip_posit[:,0],tip_posit[:,1],tip_posit[:,2],c=color)
-# else:
-#     print ("the end")
-# #    print (np.std(pose_marker,axis=0), "std in x,y,z,axangle")
-# #    print (np.std(pose_marker,axis=0,bias =1), "std in x,y,z,axangle")
-# #    print (np.var(pose_marker,axis=0), "var in x,y,z,axangle")
-# #    # sens_noise_cov_mat = np.cov(pose_marker_without_opt.T)
-#     ax.scatter(pose_marker_without_opt[:,3],pose_marker_without_opt[:,4],pose_marker_without_opt[:,5],c ='r')
-#     # ax.scatter(pose_marker_with_APE[:,3],pose_marker_with_APE[:,4],pose_marker_with_APE[:,5],c = 'b' )
-#     ax.scatter(pose_marker_with_DPR[:,3],pose_marker_with_DPR[:,4],pose_marker_with_DPR[:,5],c = 'g' )
-# #    plt.axis('equal')
-# # np.savetxt("/home/biorobotics/Desktop/tejas/cpp_test/workingCodes/noise_filter/sens_noise_cov_mat.txt",sens_noise_cov_mat)
-
-# if hist_plot_switch == 1:
-#     # fig = plt.figure()
-
-#     # plt.hist(pose_marker[:,0],20,facecolor='red',density=True)
-#     # plt.hist(pose_marker[:,1],20,facecolor='green',density=True)
-#     # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
-#     # fig = plt.figure()
-#     # plt.hist(pose_marker[:,0],20,facecolor='red',density=True)
-#     # fig = plt.figure()
-#     # plt.hist(pose_marker[:,1],20,facecolor='green',density=True)
-#     # fig = plt.figure()
-#     # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
-
-# #    fig = plt.figure()
-# #    plt.hist(pose_marker_avg[:,2],20,facecolor='red',density=True, label='pose_marker_avg')
-# #    plt.legend()
-#     fig = plt.figure()
-#     plt.hist(pose_marker_with_opt[:,5],200,facecolor='green',density=True,  label='with_opt')
-# #    plt.legend()
-# #    fig = plt.figure()
-#     plt.hist(pose_marker_without_opt[:,5],200,facecolor='red',density=True,  label='without_opt')
-#     plt.legend()
-
-#     # fig = plt.figure()
-#     # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
+pose_marker_with_DPR= pose_marker_with_DPR[0:j,:]
+pose_marker_without_opt = pose_marker_without_opt[0:j,:]
+#pose_marker_avg = pose_marker_avg[0:j,:]
+tip_posit = tip_posit[0:j,:]
 
 
-# #plt.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection="3d")
+
+ax.set_xlabel('X Label')
+ax.set_ylabel('Y Label')
+ax.set_zlabel('Z Label')
+
+if detect_tip_switch == 1:
+#    print (np.std(tip_posit,axis=0), "std in x,y,z")
+    ax.scatter(tip_posit[:,0],tip_posit[:,1],tip_posit[:,2],c=color)
+else:
+    print ("the end")
+#    print (np.std(pose_marker,axis=0), "std in x,y,z,axangle")
+#    print (np.std(pose_marker,axis=0,bias =1), "std in x,y,z,axangle")
+#    print (np.var(pose_marker,axis=0), "var in x,y,z,axangle")
+#    # sens_noise_cov_mat = np.cov(pose_marker_without_opt.T)
+    ax.scatter(pose_marker_without_opt[:,3],pose_marker_without_opt[:,4],pose_marker_without_opt[:,5],c ='r')
+    # ax.scatter(pose_marker_with_APE[:,3],pose_marker_with_APE[:,4],pose_marker_with_APE[:,5],c = 'b' )
+    ax.scatter(pose_marker_with_DPR[:,3],pose_marker_with_DPR[:,4],pose_marker_with_DPR[:,5],c = 'g' )
+#    plt.axis('equal')
+# np.savetxt("/home/biorobotics/Desktop/tejas/cpp_test/workingCodes/noise_filter/sens_noise_cov_mat.txt",sens_noise_cov_mat)
+
+if hist_plot_switch == 1:
+    # fig = plt.figure()
+
+    # plt.hist(pose_marker[:,0],20,facecolor='red',density=True)
+    # plt.hist(pose_marker[:,1],20,facecolor='green',density=True)
+    # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
+    # fig = plt.figure()
+    # plt.hist(pose_marker[:,0],20,facecolor='red',density=True)
+    # fig = plt.figure()
+    # plt.hist(pose_marker[:,1],20,facecolor='green',density=True)
+    # fig = plt.figure()
+    # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
+
+#    fig = plt.figure()
+#    plt.hist(pose_marker_avg[:,2],20,facecolor='red',density=True, label='pose_marker_avg')
+#    plt.legend()
+    fig = plt.figure()
+    plt.hist(pose_marker_with_opt[:,5],200,facecolor='green',density=True,  label='with_opt')
+#    plt.legend()
+#    fig = plt.figure()
+    plt.hist(pose_marker_without_opt[:,5],200,facecolor='red',density=True,  label='without_opt')
+    plt.legend()
+
+    # fig = plt.figure()
+    # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
+
+
+#plt.show()
 
