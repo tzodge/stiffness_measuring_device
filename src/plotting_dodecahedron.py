@@ -56,7 +56,7 @@ wo=np.array([0,0,1])  # x axis
 ax.set_xlim3d(-2*scale_fac, 2*scale_fac)
 ax.set_ylim3d(-2*scale_fac, 2*scale_fac)
 ax.set_zlim3d(-2*scale_fac, 2*scale_fac)
-#ax.hold(True)
+ax.hold(True)
 
 # ax.quiver(0, 0, 0, uo, vo, wo, length=1, normalize=True)
 ax.quiver(0, 0, 0,uo[0], uo[1],uo[2],color ='r' ,length=20, normalize=True)

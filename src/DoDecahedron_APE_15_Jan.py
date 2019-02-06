@@ -15,32 +15,7 @@ import time
 from scipy.optimize import minimize, leastsq,least_squares
 from scipy import linalg
 
-import roslib
-# roslib.load_manifest('my_package')
-import sys
-import rospy
-import cv2
-from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
-import time
-
-# class image_converter:
-	# def __init__(self):
-	# 	# self.image_pub = rospy.Publisher("image_topic_2",Image)
-	# 	self.image_sub = rospy.Subscriber("/camera/image_color",Image,self.callback)
-
-def get_frame():
-	frame = rospy.wait_for_message("/camera/image_color", Image, 5 )
-	return frame
-
-def run():
-	# ic = image_converter()
-	rospy.init_node('image_converter', anonymous=True)
-	bridge = CvBridge()
-	frame = get_frame()
-	img = bridge.imgmsg_to_cv2(frame, "bgr8")
-	return img
+#import numdifftools as nd
 
 ### functions ##
 ###Drawing functions 
@@ -563,7 +538,7 @@ n_points_per_marker = 15
 # b9_wrt_obj =  tf_8_9.dot(b9_native)
 
 
-with np.load('PTGREY.npz') as X:
+with np.load('HD920.npz') as X:
     mtx, dist = [X[i] for i in ('mtx','dist')] 
     
 R_cent_face = np.load('Center_face_rotations.npy')
@@ -607,15 +582,28 @@ time_vect = [0]*iterations_for_while
 #frame_color = frame
 #frame_gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 #frame = frame_gray
-cv2.namedWindow('image',cv2.WINDOW_NORMAL)
-while(j<iterations_for_while):
-    	
-	
-    frame = run()
-    cv2.imshow("image",frame)
 
+while(j<iterations_for_while):
+    
+    # # Capture frame-by-frame
+    
+    ret, frame = cap.read()
+    frame_color = frame
     # frame = frame/255
-    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame = frame_gray
+    
+    # # analyze with one image
+    
+    # frame = cv2.imread('opencv_frame_2.jpg')
+    
+    # frame = cv2.imread('synthetic_img.jpg')
+    # # dist = np.zeros((1,5))  # only to be used for the synthetic image
+    # # mtx = np.eye(3)     # only to be used for the synthetic image
+    
+    # frame_color = frame    
+    # frame_gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame = frame_gray
     
     #lists of ids and the corners beloning to each id
     corners, ids, rejectedImgPoints = aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
@@ -625,7 +613,7 @@ while(j<iterations_for_while):
     tvecs = np.zeros((13,1,3))
     # print(ids,"ids")
     markers_possible = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
-    markers_impossible = np.array([13,17,37,16,34,45,38,24,47,32,40])
+    markers_impossible = np.array([13,17,37,16,34,45,38,24,47])
     
     print(cap.get(cv2.CAP_PROP_AUTO_EXPOSURE))
     if ids not in markers_impossible and ids is not None:
@@ -792,9 +780,9 @@ else:
     # ax.set_ylim((np.min(pose_marker_without_opt[:,4]),np.max(pose_marker_without_opt[:,4])))
     # ax.set_zlim((np.min(pose_marker_without_opt[:,5]),np.max(pose_marker_without_opt[:,5])))
     
-    # ax.set_xlim((-100,100))
-    # ax.set_ylim((-100,100))
-    # ax.set_zlim((200,350))
+    ax.set_xlim((-100,100))
+    ax.set_ylim((-100,100))
+    ax.set_zlim((200,350))
     
     # plt.axis('equal')
 # np.savetxt("/home/biorobotics/Desktop/tejas/cpp_test/workingCodes/noise_filter/sens_noise_cov_mat.txt",sens_noise_cov_mat)
@@ -826,5 +814,5 @@ if hist_plot_switch == 1:
     # plt.hist(pose_marker[:,2],20,facecolor='blue',density=True)
 
 
-plt.show()
+#plt.show()
 
