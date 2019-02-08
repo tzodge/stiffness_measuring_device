@@ -444,23 +444,17 @@ def gauss_newton(p):
 
     return p   
 
-def remove_bad_aruco_centers(center_transforms):
+def good_aruco_center_indices(centers_R3, max_dist=40):
     """
-    takes in the tranforms for the aruco centers
-    returns the transforms, centers coordinates, and indices for centers which 
-    aren't too far from the others
+    takes in the centers for the aruco markers
+    returns indices for centers which are within max_dist of another center
     """
 
-    max_dist = 40 # mm
-
-    centers_R3 = center_transforms[:, 0:3, 3]
     distances = cdist(centers_R3, centers_R3)
     good_pairs = (distances > 0) * (distances < max_dist)
     good_indices = np.where(np.sum(good_pairs, axis=0) > 0)[0].flatten()
 
-    return center_transforms[good_indices, :, :], \
-           centers_R3[good_indices, :], \
-           good_indices
+    return good_indices
 
 
 ######
@@ -573,22 +567,22 @@ while(j<iterations_for_while):
         N_markers =ids.shape[0]
         frame = aruco.drawDetectedMarkers(frame, corners, ids)
         # m is the index for marker ids
-        jj = 0
+
         T_cents = np.zeros((len(ids) * 2, 4, 4))
-        ids_temp = np.zeros(len(ids) * 2)
+        ids_with_reflections = np.zeros(len(ids) * 2)
 
         for i in range(len(ids)):
             m = ids[i]
-            m_indx = np.asarray(np.where(m==ids))
-            rvecs[m,:,:], tvecs[m,:,:], _ = cv2.aruco.estimatePoseSingleMarkers( corners[int(m_indx[0])], marker_size_in_mm, mtx,dist)
-            jj+=1
+            rvecs[m,:,:], tvecs[m,:,:], _ = cv2.aruco.estimatePoseSingleMarkers(corners[i], marker_size_in_mm, mtx,dist)
             T_4_Aruco = RodriguesToTransf(np.append(rvecs[m,:,:], tvecs[m,:,:]))
+
+            # create a reflected copy of the tranformation
             T_4_Aruco_reflected = T_4_Aruco.copy()
             T_4_Aruco_reflected[0:3,2] = T_4_Aruco_reflected[0:3,2] * -1
             T_4_Aruco_reflected[2,0:3] = T_4_Aruco_reflected[2,0:3] * -1
             T_mat_cent_face,T_mat_face_cent = tf_mat_dodeca_pen(int(m))
 
-            # TODO remove this code for Dodecahedron
+            # TODO: remove this code for Dodecahedron (temporary code for cardboard piece)
             if m == 9:
                 T_mat_face_cent = np.eye(4)
                 T_mat_face_cent[1, 3] = -35
@@ -602,23 +596,27 @@ while(j<iterations_for_while):
                 T_mat_face_cent[2, 3] = -50
 
             cv2.aruco.drawAxis(frame,mtx,dist,rvecs[m,:,:], tvecs[m,:,:],20)
+
             T_cents[i*2,:,:] = np.matmul(T_4_Aruco,T_mat_face_cent)
             T_cents[i*2 + 1,:,:] = np.matmul(T_4_Aruco_reflected,T_mat_face_cent)
-            ids_temp[i*2 : i*2 + 2] = m
+            ids_with_reflections[i*2 : i*2 + 2] = m
 
+        # filter out bad aruco centers
+        centers_R3 = T_cents[:, 0:3, 3]
+        good_indices = good_aruco_center_indices(centers_R3)
+        T_cents = T_cents[good_indices, :, :]
+        centers_R3 = centers_R3[good_indices, :]
+        ids_with_reflections = ids_with_reflections[good_indices]
 
-        T_cents, centers_R3, good_indices = remove_bad_aruco_centers(T_cents)
-        print(good_indices)
-        print(ids_temp[good_indices])
-        for i in range(len(ids_temp[good_indices])):
+        print("good ids ", ids_with_reflections)
+
+        for i in range(len(ids_with_reflections)):
             cent_in_R3 = centers_R3[i,:]
-            print(cent_in_R3)
             px_sp,_ = cv2.projectPoints(np.reshape(cent_in_R3, (1,3)), 
                                         np.zeros((3,1)), np.zeros((3,1)), 
                                         mtx, dist)
-            temp1 = int(px_sp[0,0,0])
-            temp2 = int(px_sp[0,0,1])
-            cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
+            cv2.circle(frame, (int(px_sp[0,0,0]), int(px_sp[0,0,1])), 
+                       10, (0,0,0), 10)
 
 ####imaging
         j = j+1
