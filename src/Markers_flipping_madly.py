@@ -22,6 +22,7 @@ import time
 #from helper import *
 from scipy.optimize import minimize, leastsq
 from scipy import linalg
+from scipy.spatial.distance import cdist
 # from sklearn.preprocessing import normalize
 #import numdifftools as nd
 
@@ -377,55 +378,6 @@ def error_DPR(p):
     
     return LA.norm(err,1), err, transf_and_proj_int
 
-#def find_Jac (frame_gray,pose):
-#    ### takes image as input and returns 6xN jac_ps_inv
-    
-
-
-# def gauss_newton(p):
-    
-#     del_p_tol = 1e-8
-#     del_Err_tol = 1e-8
-#     ii = 0  
-    
-#     p_GN = np.zeros((1000,6))
-#     p_GN [0,:] = p
-# #    print (p,"p inside GN")
-#     Err_GN = np.zeros((1000,1))
-#     del_Err_GN = np.zeros((1000,1))
-#     del_p_mag = np.zeros((1000,1))
-#     del_p_mag[0,0] = 1e+6
-#     del_Err_GN[0,0] = 1e+6
-      
-#     while (del_p_mag[ii,0] > del_p_tol) or (del_Err_GN[ii,0] > del_Err_tol ):
-        
-#         #### del_p = Jac_ps_inv*(I_t - I_c)
-#         #### we need Jac_ps_inv 
-#         #### for jac_ps_inv, we need transf_and_proj_int 
-#         Err_GN[ii,0], It_m_Ic, transf_and_proj_int = error_DPR(p_GN[ii,:])
-#         _, J_ps_inv = Intensity_Jacobian (p_GN[ii,0:3],p_GN[ii,3:6],mtx,frame_grad_u, frame_grad_v, transf_and_proj_int)
-        
-# #        J_ps_inv = find_Jac_ps_inv (frame_gray,pose)
-        
-        
-#         p_GN[ii+1,:] = p_GN[ii,:] - J_ps_inv.dot(It_m_Ic)
-#         Err_GN[ii+1,0], _, _ = error_DPR(p_GN[ii+1,:])
-        
-#         del_Err_GN[ii+1,0] = Err_GN[ii+1,0] - Err_GN[ii,0]                  
-#         del_p_mag[ii+1,0] = LA.norm((p_GN[ii+1,:] - p_GN[ii,:]),1)
-        
-# #        print (p_GN[ii,:],"p_GN[{},0]".format(ii))
-# #        print (p_GN[ii+1,:],"p_GN[{},0]".format(ii+1))
-#         print(del_Err_GN[ii,0],"del_Err_GN[ii,0]")
-#         print (del_p_mag[ii,0],"del_p_mag[ii,0]")
-#         print (ii, "ii, inside GN")
-#         draw_marker_edges(frame_color,p_GN[ii,:],8)
-#         ii += 1
-        
-    
-#     p_GN = p_GN [0:ii,:]
-
-#     return p_GN[-1,:]
     
 def gauss_newton(p):
 
@@ -491,6 +443,25 @@ def gauss_newton(p):
         print(change_in_obj_fun,"E_curr_sc")
 
     return p   
+
+def remove_bad_aruco_centers(center_transforms):
+    """
+    takes in the tranforms for the aruco centers
+    returns the transforms, centers coordinates, and indices for centers which 
+    aren't too far from the others
+    """
+
+    max_dist = 40 # mm
+
+    centers_R3 = center_transforms[:, 0:3, 3]
+    distances = cdist(centers_R3, centers_R3)
+    good_pairs = (distances > 0) * (distances < max_dist)
+    good_indices = np.where(np.sum(good_pairs, axis=0) > 0)[0].flatten()
+
+    return center_transforms[good_indices, :, :], \
+           centers_R3[good_indices, :], \
+           good_indices
+
 
 ######
 
@@ -596,7 +567,6 @@ while(j<iterations_for_while):
     # the first row will allways be [0,0,0] this is to ensure that we can start from face 1 which is actually face 0
     rvecs = np.zeros((13,1,3))
     tvecs = np.zeros((13,1,3))
-    print(ids,"ids")
     markers_possible = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     markers_impossible = np.array([15,13,17,37,16,34,45,38,24])
     if ids not in markers_impossible and ids is not None:
@@ -604,32 +574,63 @@ while(j<iterations_for_while):
         frame = aruco.drawDetectedMarkers(frame, corners, ids)
         # m is the index for marker ids
         jj = 0
-        for m in ids:
+        T_cents = np.zeros((len(ids) * 2, 4, 4))
+        ids_temp = np.zeros(len(ids) * 2)
+
+        for i in range(len(ids)):
+            m = ids[i]
             m_indx = np.asarray(np.where(m==ids))
             rvecs[m,:,:], tvecs[m,:,:], _ = cv2.aruco.estimatePoseSingleMarkers( corners[int(m_indx[0])], marker_size_in_mm, mtx,dist)
             jj+=1
             T_4_Aruco = RodriguesToTransf(np.append(rvecs[m,:,:], tvecs[m,:,:]))
+            T_4_Aruco_reflected = T_4_Aruco.copy()
+            T_4_Aruco_reflected[0:3,2] = T_4_Aruco_reflected[0:3,2] * -1
+            T_4_Aruco_reflected[2,0:3] = T_4_Aruco_reflected[2,0:3] * -1
             T_mat_cent_face,T_mat_face_cent = tf_mat_dodeca_pen(int(m))
+
+            # TODO remove this code for Dodecahedron
+            if m == 9:
+                T_mat_face_cent = np.eye(4)
+                T_mat_face_cent[1, 3] = -35
+                T_mat_face_cent[2, 3] = -50
+            elif m == 8:
+                T_mat_face_cent = np.eye(4)
+                T_mat_face_cent[2, 3] = -50
+            elif m == 7:    
+                T_mat_face_cent = np.eye(4)
+                T_mat_face_cent[1, 3] = 35
+                T_mat_face_cent[2, 3] = -50
+
             cv2.aruco.drawAxis(frame,mtx,dist,rvecs[m,:,:], tvecs[m,:,:],20)
-            T_cent = np.matmul(T_4_Aruco,T_mat_face_cent)
-            cent_in_R3 =np.reshape(T_cent[0:3,3],(3,1))
-            px_sp,_ = cv2.projectPoints(cent_in_R3.T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
+            T_cents[i*2,:,:] = np.matmul(T_4_Aruco,T_mat_face_cent)
+            T_cents[i*2 + 1,:,:] = np.matmul(T_4_Aruco_reflected,T_mat_face_cent)
+            ids_temp[i*2 : i*2 + 2] = m
+
+
+        T_cents, centers_R3, good_indices = remove_bad_aruco_centers(T_cents)
+        print(good_indices)
+        print(ids_temp[good_indices])
+        for i in range(len(ids_temp[good_indices])):
+            cent_in_R3 = centers_R3[i,:]
+            print(cent_in_R3)
+            px_sp,_ = cv2.projectPoints(np.reshape(cent_in_R3, (1,3)), 
+                                        np.zeros((3,1)), np.zeros((3,1)), 
+                                        mtx, dist)
             temp1 = int(px_sp[0,0,0])
             temp2 = int(px_sp[0,0,1])
             cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
-            cent_prev = cent_in_R3
+
 ####imaging
-        print (j)
         j = j+1
         # cv2.imshow('frame',frame)
         cv2.imshow('frame_color',frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
+        if cv2.waitKey(0) & 0xFF == ord('q') or j >= iterations_for_while:
             break
     else: 
         print("Required marker not visible")
         cv2.imshow('frame',frame)
-        if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
+        if cv2.waitKey(0) & 0xFF == ord('q') or j >= iterations_for_while:
             break
 
 
