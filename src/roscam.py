@@ -11,41 +11,39 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import Markers_flipping
 
-class image_converter:
-
-  def __init__(self):
-    self.image_pub = rospy.Publisher("image_topic_2",Image)
-
+class RosCam:
+  def __init__(self, topic):
     self.bridge = CvBridge()
-    self.image_sub = rospy.Subscriber("/camera/image_color",Image,self.callback)
+    self.cv_image = None
+    self.image_sub = rospy.Subscriber(topic,Image,self.callback)
+    
 
   def callback(self,data):
     try:
-      cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-    except CvBridgeError as e:
-      print(e)
-
-    (rows,cols,channels) = cv_image.shape
-    print(cv_image.shape)
-    if cols > 60 and rows > 60 :
-      cv2.circle(cv_image, (50,50), 10, 255)
-      
-    # markers_flipping_madly(frame)
-    cv2.imshow("Image window", cv_image)
-    cv2.waitKey(3)
-
-    try:
-      self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
+      self.cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
 
 def main(args):
-  ic = image_converter()
-  rospy.init_node('image_converter', anonymous=True)
-  try:
-    rospy.spin()
-  except KeyboardInterrupt:
-    print("Shutting down")
+  import time
+
+  print("hello")
+  rospy.init_node('RosCam', anonymous=True)
+  ic = RosCam("/camera/image_color")
+
+  while True:
+    if ic.cv_image is None:
+      time.sleep(0.1)
+      continue
+    try:
+      print(ic.cv_image[0,0])
+      cv2.imshow("Image window", ic.cv_image)
+      if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+      
+    except KeyboardInterrupt:
+      print("Shutting down")
+      break
   cv2.destroyAllWindows()
 
 # def listener():

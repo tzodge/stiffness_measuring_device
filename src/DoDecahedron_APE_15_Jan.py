@@ -136,7 +136,7 @@ iii = 0
 
 sub_pix_refinement_switch =1
 detect_tip_switch = 0
-hist_plot_switch = 1
+hist_plot_switch = 0
 
 
 iterations_for_while =5500
@@ -291,7 +291,7 @@ while(j<iterations_for_while):
 
             temp2 = int(px_sp[0,0,1])
 
-            cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
+            # cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
             
         # Tf_cam_ball = np.mean(T_cent_accepted,axis=0)
         Tf_cam_ball = np.mean(T_cent_accepted,axis=0)
@@ -324,13 +324,13 @@ while(j<iterations_for_while):
         px_sp,_ = cv2.projectPoints(np.reshape(res[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
         temp1 = int(px_sp[0,0,0])
         temp2 = int(px_sp[0,0,1])
-        cv2.circle(frame,(temp1,temp2), 5 , (0,255,255), 2)
+        cv2.circle(frame,(temp1,temp2), 8 , (0,0,255), 3)
         no_of_accepted_points = len(good_indices)              
         if no_of_accepted_points is not 0:
             px_sp,_ = cv2.projectPoints(np.reshape(t_vec_aruco,(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
             temp1 = int(px_sp[0,0,0])
             temp2 = int(px_sp[0,0,1])
-            cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
+            # cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
 
         N_corners = ids.shape[0]
         
@@ -421,9 +421,9 @@ if hist_plot_switch == 1:
     # plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1 )
     # plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1 )
  
-    plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1 )
+    plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1,label = 'without_opt' )
     fig = plt.figure()
-    plt.hist(pose_marker_with_APE[:,2],j,facecolor='red',normed = 1 )
+    plt.hist(pose_marker_with_APE[:,2],j,facecolor='red',normed = 1, label = 'with_opt'  )
 
     # plt.hist(pose_marker[:,0],20,facecolor='red',density=True)
     # fig = plt.figure()
