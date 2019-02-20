@@ -125,6 +125,48 @@ def remove_bad_aruco_centers(center_transforms):
         good_indices = np.array([0, 1]) 
 
     return center_transforms[good_indices, :, :], centers_R3[good_indices, :], good_indices
+
+def local_frame_grads (frame_gray, corners, ids):
+''' Takes in the frame, the corners of the markers the camera sees and ids of the markers seen. 
+Returns the frame gradients
+Input: frame_gray --> grayscale frame
+corners: stacked as corners[num_markers,:,:] 
+ids: ids seen
+Output
+frame_grad_u and frame_grad_v: matrices of sizes as frame gray. the areas near the markers will 
+have gradients of the frame_gray frame in the same locations and rest is 0
+'''
+    pass
+
+def marker_edges(aruco_id,downsample):
+''' Function to give the edge points in the image and their intensities.
+to be called only once in the entire program to gather reference data for DPR
+output: 
+b_edge = [id,:,:] points on the marker in R3 where the intensities change form [x,y,0]
+to be directly used in cv2.projectpoints
+edge_intensities = [id,:] ordered expected intensity points for the edge points to be used on obj fun of DPR
+'''
+    pass
+def get_marker_borders (corners,dilate_fac):
+''' Dilates a given marker from the corner pxl locations in an image by the dilate factor. 
+Returns: stack of expanded corners in the pixel space'''
+
+    cent = np.array([np.mean(corners[:,0]), np.mean(corners[:,1])])
+    
+    vert_1 = (corners[0,:] - cent)* dilate_fac
+    vert_2 = (corners[1,:] - cent)* dilate_fac
+    vert_3 = (corners[2,:] - cent)* dilate_fac
+    vert_4 = (corners[3,:] - cent)* dilate_fac
+    
+    expanded_corners = np.vstack((vert_1+cent,vert_2+cent,vert_3+cent,vert_4+cent))
+     
+    return expanded_corners
+
+def LM_DPR(pose_guess, frame, reference_points, reference_intensities):
+''' Objective function for the DPR step. Takes in pose as the first arg [mandatory!!] and,
+returns the value of the obj fun and jacobial of the obj fun'''    
+    pass
+
     
 ######
 
@@ -225,8 +267,9 @@ while(j<iterations_for_while):
         frame = aruco.drawDetectedMarkers(frame, corners, ids)
         # m is the index for marker ids
         jj = 0
+        # the following are with the camera frame
         cent_in_R3 = np.zeros((N_markers,3))
-        T_cent = np.zeros((ids.shape[0],4,4))
+        T_cent = np.zeros((ids.shape[0],4,4)) 
         for m in ids:
             m_indx = np.asarray(np.where(m==ids))
             rvecs[m,:,:], tvecs[m,:,:], _ = cv2.aruco.estimatePoseSingleMarkers( corners[int(m_indx[0])], marker_size_in_mm, mtx,dist)
@@ -303,7 +346,7 @@ while(j<iterations_for_while):
         stacked_corners_px_sp =  np.reshape(np.asarray(corners),(ids.shape[0]*4,2))
         
         X_guess = np.append(r_vec_aruco,np.reshape(t_vec_aruco,(3,1))).reshape(6,1)
-        pose_marker_without_opt[j,:] = X_guess.T
+        pose_marker_without_opt[j,:] = X_guess.T # not efficient. May have to change
         # print(X_guess,"X_guess")
         t_0_APE = time.time()
         # res = least_squares (LM_APE_Dodecapen,np.reshape(X_guess,(6,)),jac='2-point', bounds=(-np.inf, np.inf), method='lm', ftol=1e-08, xtol=1e-08, gtol=1e-15, x_scale=1.0, loss='linear', f_scale=1.0, diff_step=None, tr_solver=None, tr_options={}, jac_sparsity=None, max_nfev=None, verbose=0,args = (stacked_corners_px_sp, ids))
