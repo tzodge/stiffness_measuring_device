@@ -51,7 +51,6 @@ def LM_APE_Dodecapen(X,stacked_corners_px_sp, ids, flag=False):
     corners_in_cart_sp = np.zeros((ids.shape[0],4,3))
     Tf_cam_ball = RodriguesToTransf(X)
     for ii in range(ids.shape[0]):
-        # print(int(ids[ii]))
         Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
         corners_in_cart_sp[ii,:,:] = Tf_cam_ball.dot(corners_3d(Tf_cent_face,marker_size_in_mm)).T[:,0:3]
     
@@ -119,7 +118,6 @@ def remove_bad_aruco_centers(center_transforms):
     good_pairs = (distances > 0) * (distances < max_dist)
 
     good_indices = np.where(np.sum(good_pairs, axis=0) > 0)[0].flatten()
-    # print(good_indices,'good index shape')
 
     if good_indices.shape[0] == 0 :
         print('good_indices is none, resetting')
@@ -138,12 +136,10 @@ def local_frame_grads (frame_gray, corners, ids):
     have gradients of the frame_gray frame in the same locations and rest is 0
     '''
     dilate_fac =1.2
-    # frame_modified = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
     frame_grad_u = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
     frame_grad_v = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
 
     for i in range(len(ids)):
-        # print(corners[i,:,:].shape,"corners[i,:,:]")
         expanded_corners = get_marker_borders(corners[i,:,:],dilate_fac)
         v_low = int(np.min(expanded_corners[:,1]))
         v_high = int(np.max(expanded_corners[:,1])) 
@@ -151,13 +147,10 @@ def local_frame_grads (frame_gray, corners, ids):
         u_high = int(np.max(expanded_corners[:,0]))
 
         frame_local = np.copy(frame_gray[v_low:v_high,u_low:u_high]) # not sure if v and u are correct order
-        # frame_modified[x_low:x_high,y_low:y_high] = np.copy(frame_local)
 
         A,B = np.gradient(frame_local.astype('float32'))
         frame_grad_v[v_low:v_high,u_low:u_high] = np.copy(A) 
         frame_grad_u[v_low:v_high,u_low:u_high] = np.copy(B)
-    # cv2.imshow("..", frame_grad_v)
-    # time.sleep(1)
     return  frame_grad_u, frame_grad_v
 
 def marker_edges(ids,downsample,edge_pts_in_img_sp,aruco_images_int16,img_pnts):
@@ -168,22 +161,17 @@ def marker_edges(ids,downsample,edge_pts_in_img_sp,aruco_images_int16,img_pnts):
     to be directly used in cv2.projectpoints
     edge_intensities = [:] ordered expected intensity points for the edge points to be used on obj fun of DPR size (ids x downsample)
     '''
-# TO COPY FROM TEJAS STUFF-------------------------------------------------
     b_edge = []
     edge_intensities_expected = []
     for aruco_id in ids:
-        # print(aruco_id)
         b = edge_pts_in_img_sp[aruco_id]
         n = b.shape[0]
         b[:,2] = 0.
         b[:,3] = 1
-        # print(b[0::downsample,:].shape)
         b_shaped = b[0::downsample,0:4].astype(np.float32) 
         b_edge.append(b_shaped)
         img_pnts_curr =img_pnts[aruco_id][0::downsample,:]
         edge_intensities = aruco_images_int16[aruco_id][img_pnts_curr [:,1]+60,img_pnts_curr [:,0]+60]# TODO can we have it in terms of dil_fac
-        # print(edge_intensities.shape,"edge_intensities.shape")
-        # print(b_shaped.shape,"b_shaped.shape")
         edge_intensities_expected.append(edge_intensities)
     # ---------------------------------------------------------------
     return np.asarray(b_edge) , np.asarray(edge_intensities_expected)
@@ -207,50 +195,29 @@ def get_marker_borders (corners,dilate_fac):
 def LM_DPR(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all):
     ''' Objective function for the DPR step. Takes in pose as the first arg [mandatory!!] and,
     returns the value of the obj fun and jacobial of the obj fun'''    
-    # borders_in_cart_sp = np.zeros((ids.shape[0],4,b_edge[0].shape[0]))
+
     Tf_cam_ball = RodriguesToTransf(X)
     borders_in_cart_sp = []
     edge_intensities_expected = []
     for ii in range(ids.shape[0]):
-        # print(ii,'ii')
         Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
         borders_in_cart_sp.append((Tf_cam_ball.dot(b_edge[ii].T)).T)
-        # print(edge_intensities_expected[ii].reshape(edge_intensities_expected[ii].shape[0],1),"adadadadad")
         edge_intensities_expected.append(edge_intensities_expected_all[ii].reshape(edge_intensities_expected_all[ii].shape[0],1))
 
     stacked_borders_in_cart_sp = np.vstack(borders_in_cart_sp)
     edge_intensities_expected_stacked = np.vstack(edge_intensities_expected)
-    # print(edge_intensities_expected_stacked.shape,"edge_intensities_expected_stacked.shape")
-    # print(stacked_borders_in_cart_sp.shape,"stacked_borders_in_cart_sp.shape")
     
     proj_points, _ = cv2.projectPoints( stacked_borders_in_cart_sp [:,0:3], np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
     proj_points_int = np.ndarray.astype(proj_points,int)
 
     proj_points_int = proj_points_int.reshape(proj_points_int.shape[0],2)
     n_int = proj_points_int.shape[0]
-    # print (proj_points_int.shape,'proj_points_int shape')
-
-    # du_by_dp = duvec_by_dp_all[0::2,0:6]
-    # dv_by_dp = duvec_by_dp_all[0::1,0:6]
-
-    # dI_by_du,dI_by_dv = local_frame_grads (frame_gray, np.vstack(corners), ids)
-    # # print(dI_by_dv.shape,"dI_by_dv.shape")
-    # # print(dI_by_du.shape,"dI_by_du.shape")
-    # dI_by_dp = np.zeros((n_int,6))
-    # # print(proj_points_int)
-    # for i in range(n_int):
-    #     ui,vi = proj_points_int[i,0], proj_points_int[i,1]
-    #     # print([ui,vi],"ui,vi")
-    #     dI_by_dp[i,:] = dI_by_du [ui,vi] * du_by_dp[i] + dI_by_dv [ui,vi] * dv_by_dp[i] #TODO confirn [u,v] order in eqn
-
     temp = proj_points.shape[0]
     proj_points = proj_points.reshape(temp,2)
 
     f_p = frame_gray[proj_points_int[:,0],proj_points_int[:,1]]  # TODO i dont think framegray int16 is needed ? Also 0,1 order changed
-    # print(f_p.shape,'obtained_intensities')
     err = (edge_intensities_expected_stacked - f_p.reshape(f_p.shape[0],1))/float(n_int) # this is the error in the intensities
 
-    # print(err.sum(),'error sum')
     return  err.reshape(err.shape[0],)
 
 def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all):
@@ -261,10 +228,8 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
     borders_in_cart_sp = []
     edge_intensities_expected = []
     for ii in range(ids.shape[0]):
-        # print(ii,'ii')
         Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
         borders_in_cart_sp.append((Tf_cam_ball.dot(b_edge[ii].T)).T)
-        # print(edge_intensities_expected[ii].reshape(edge_intensities_expected[ii].shape[0],1),"adadadadad")
         edge_intensities_expected.append(edge_intensities_expected_all[ii].reshape(edge_intensities_expected_all[ii].shape[0],1))
 
     stacked_borders_in_cart_sp = np.vstack(borders_in_cart_sp)
@@ -273,7 +238,6 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
     proj_points_int = np.ndarray.astype(proj_points,int)
 
     proj_points_int = proj_points_int.reshape(proj_points_int.shape[0],2)
-    # print (proj_points_int.shape,'proj_points_int shape')
 
     du_by_dp = duvec_by_dp_all[0::2,0:6]
     dv_by_dp = duvec_by_dp_all[0::1,0:6]
@@ -281,14 +245,10 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
     dI_by_dv,dI_by_du = local_frame_grads (frame_gray, np.vstack(corners), ids) ##TODO local frame gradients not working pl check
     # dI_by_dv,dI_by_du = np.gradient (frame_gray.astype('float32'))
 
-    # print(dI_by_dv.shape,"dI_by_dv.shape")
-    # print(dI_by_du.shape,"dI_by_du.shape")
     n_int = proj_points_int.shape[0]
     dI_by_dp = np.zeros((n_int,6))
-    # print(proj_points_int)
     for i in range(n_int):
         ui,vi = proj_points_int[i,0], proj_points_int[i,1]
-        # print([ui,vi],"ui,vi")
         dI_by_dp[i,:] = dI_by_du [ui,vi] * du_by_dp[i] + dI_by_dv [ui,vi] * dv_by_dp[i] #TODO confirn [u,v] order in eqn
 
     return dI_by_dp
@@ -303,9 +263,8 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
 
 
 ### Switches: 
-global transf_and_proj_int 
 
-iii = 0
+# iii = 0
 
 sub_pix_refinement_switch =1
 detect_tip_switch = 0
@@ -387,7 +346,6 @@ while(j<iterations_for_while):
     # the first row will allways be [0,0,0] this is to ensure that we can start from face 1 which is actually face 0
     rvecs = np.zeros((13,1,3))
     tvecs = np.zeros((13,1,3))
-    # print(ids,"ids")
     
     corners, ids, rejectedImgPoints = aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
 
@@ -405,21 +363,9 @@ while(j<iterations_for_while):
             T_4_Aruco = RodriguesToTransf(np.append(rvecs[m,:,:], tvecs[m,:,:]))
             T_mat_cent_face,T_mat_face_cent = tf_mat_dodeca_pen(int(m))
             T_cent[jj,:,:] = np.matmul(T_4_Aruco,T_mat_face_cent)
-            # cent_in_R3[jj,:] =np.reshape(T_cent[jj,0:3,3],(1,3))
             jj+=1
-        # print(T_cent.shape[0],'Markers seen')
         T_cent_accepted, centers_R3, good_indices = remove_bad_aruco_centers(T_cent)
-
-           # for i in range(len(ids[good_indices])):
-
-           #      # print(centers_R3[i,:],'id of accepted marker')
-           #      cent_in_R3 = centers_R3[i,:]
-           #      px_sp,_ = cv2.projectPoints(np.reshape(cent_in_R3, (1,3)),
-           #                                  np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-           #      temp1 = int(px_sp[0,0,0])
-           #      temp2 = int(px_sp[0,0,1])
-           #      cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
-            
+         
         Tf_cam_ball = np.mean(T_cent_accepted,axis=0)
         # getting the rvecs and t vecs by averaging
         r_vec_aruco,_ = cv2.Rodrigues(Tf_cam_ball[0:3,0:3])
@@ -428,38 +374,28 @@ while(j<iterations_for_while):
         
         X_guess = np.append(r_vec_aruco,np.reshape(t_vec_aruco,(3,1))).reshape(6,1)
         pose_marker_without_opt[j,:] = X_guess.T # not efficient. May have to change
-        # print(X_guess,"X_guess")
 
-        # t_0_APE = time.time()
-
-        # res = least_squares (LM_APE_Dodecapen,np.reshape(X_guess,(6,)),
-        #     jac = '2-point', method='lm', ftol=1.49012e-08, xtol=1.49012e-08, 
-        #     gtol=0.0, x_scale=1.0, loss='linear',  diff_step=None, verbose=0, 
-        #     args = (stacked_corners_px_sp, ids, False))
-        
         res = leastsq (LM_APE_Dodecapen,X_guess,Dfun=None, full_output=0, 
             col_deriv=0, ftol=1.49012e-8, xtol=1.49012e-8, gtol=0.0, 
             maxfev=1000, epsfcn=None, factor=100, diag=None, 
             args = (stacked_corners_px_sp, ids,False)) 
 
-        # t_1_APE = time.time() - t_0_APE
-        # print(t_1_APE,"Time for APE")       
 
         pose_marker_with_APE[j,:] = np.reshape(res[0],(1,6))
         
-        # print(LA.norm(np.reshape(res[0],(1,6)) - X_guess.T ,2),'Improvement in APE')
         Tf_cam_ball = RodriguesToTransf(res[0])
         
         px_sp,_ = cv2.projectPoints(np.reshape(res[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
         temp1 = int(px_sp[0,0,0])
         temp2 = int(px_sp[0,0,1])
         cv2.circle(frame,(temp1,temp2), 8 , (0,0,255), 3)
-        no_of_accepted_points = len(good_indices)              
+        no_of_accepted_points = len(good_indices) 
+                     
         if no_of_accepted_points is not 0:
             px_sp,_ = cv2.projectPoints(np.reshape(t_vec_aruco,(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
             temp1 = int(px_sp[0,0,0])
             temp2 = int(px_sp[0,0,1])
-            # cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
+            cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
 
         N_corners = ids.shape[0]
         
@@ -487,10 +423,6 @@ while(j<iterations_for_while):
         # cv2.imshow("DPR frame", frame_gray)
         # cv2.waitKey(0)
         b_edge, edge_intensities_expected =  marker_edges(ids,100,edge_pts_in_img_sp,aruco_images_int16,img_pnts)
-        # print(b_edge[0].shape,"b_edge_first guy.shape") 
-        # print(edge_intensities_expected.shape,"edge_intensities_expected first guy.shape") 
-        # LM_DPR(res.x, frame_gray, ids, corners, b_edge, edge_intensities_expected)
-        # res_DPR = least_squares (LM_DPR,res.x,jac= LM_DPR_Jacobian, method='lm', ftol=1e-08, xtol=1e-08, gtol=1e-8, x_scale=1.0, loss='linear',  diff_step=None, verbose=0, args = (frame_gray, ids, corners, b_edge, edge_intensities_expected))
 
         res_DPR = leastsq (LM_DPR,res[0], Dfun= LM_DPR_Jacobian, full_output=0, 
             col_deriv=0, ftol=1.49012e-8, xtol=1.49012e-8, gtol=0.0, 
@@ -552,31 +484,14 @@ if detect_tip_switch == 1:
     ax.scatter(tip_posit[:,0],tip_posit[:,1],tip_posit[:,2],c=color)
 else: 
     print ("the end")
-#    print (np.std(pose_marker,axis=0), "std in x,y,z,axangle")
-#    print (np.std(pose_marker,axis=0,bias =1), "std in x,y,z,axangle")
-#    print (np.var(pose_marker,axis=0), "var in x,y,z,axangle")
-#    # sens_noise_cov_mat = np.cov(pose_marker_without_opt.T)
     ax.scatter(pose_marker_without_opt[:,3],pose_marker_without_opt[:,4],pose_marker_without_opt[:,5],c ='k')
     ax.scatter(pose_marker_with_APE[:,3],pose_marker_with_APE[:,4],pose_marker_with_APE[:,5],c = 'r' )
     # ax.scatter(pose_marker_with_DPR[:,3],pose_marker_with_DPR[:,4],pose_marker_with_DPR[:,5],c = 'g' )
     
-#     # ax.set_xlim((np.min(pose_marker_without_opt[:,3]),np.max(pose_marker_without_opt[:,3])))
-#     # ax.set_ylim((np.min(pose_marker_without_opt[:,4]),np.max(pose_marker_without_opt[:,4])))
-#     # ax.set_zlim((np.min(pose_marker_without_opt[:,5]),np.max(pose_marker_without_opt[:,5])))
-    
-#     # ax.set_xlim((-100,100))
-#     # ax.set_ylim((-100,100))
-#     # ax.set_zlim((200,350))
     
     plt.axis('equal')
-# np.savetxt("/home/biorobotics/Desktop/tejas/cpp_test/workingCodes/noise_filter/sens_noise_cov_mat.txt",sens_noise_cov_mat)
-# print (pose_marker_without_opt[:,2]), "histogram z "
 if hist_plot_switch == 1:
     fig = plt.figure()
-    
-    # plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1 )
-    # plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1 )
- 
     plt.hist(pose_marker_without_opt[:,2],j,facecolor='blue',normed = 1,label = 'without_opt' )
     fig = plt.figure()
     plt.hist(pose_marker_with_APE[:,2],j,facecolor='red',normed = 1, label = 'with_opt'  )
