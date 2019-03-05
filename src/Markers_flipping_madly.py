@@ -650,18 +650,22 @@ while(j<iterations_for_while):
             temp2 = int(px_sp[0,0,1])
             cv2.circle(frame, (temp1,temp2), 10 , (0,0,0), 10)
             cent_prev = cent_in_R3
+            print(T_4_Aruco[0:3,0:3])
+            print('                             ')
+            print(LA.det(T_4_Aruco[0:3,0:3]),"determinant")
+
 # ####imaging
         print (j)
         j = j+1
         cv2.imshow('frame',frame)
         cv2.imshow('frame_color',frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
+        if cv2.waitKey(0) & 0xFF == ord('q') or j >= iterations_for_while:
             break
     else: 
         print("Required marker not visible")
         cv2.imshow('frame',frame)
-        if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
+        if cv2.waitKey(0) & 0xFF == ord('q') or j >= iterations_for_while:
             break
 
 
