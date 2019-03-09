@@ -59,6 +59,45 @@ def slerp(v0, v1, t_array):
     return (s0[:,np.newaxis] * v0[np.newaxis,:]) + (s1[:,np.newaxis] * v1[np.newaxis,:])
 
 ####################
+
+
+## reference https://stackoverflow.com/questions/21339448/how-to-get-list-of-points-inside-a-polygon-in-python
+
+def draw_patch(frame,corners_pix,bounding_box):
+	a = bounding_box[0] 
+	b = bounding_box[1] 
+	start_pnt = [b[0],a[0]]
+	 
+
+	x, y = np.meshgrid(a, b) # make a canvas with coordinates
+	x, y = x.flatten(), y.flatten()
+	points = np.vstack((x,y)).T 
+
+	p = Path(corners_pix) # make a polygon in pixel space
+	grid = p.contains_points(points)  # make grid
+	mask = grid.reshape(len(a),len(b)) 
+ 
+	frame[start_pnt[0]:start_pnt[0]+len(a), start_pnt[1]:start_pnt[1]+len(b)]  = \
+	np.multiply(frame[start_pnt[0]:start_pnt[0]+len(a), start_pnt[1]:start_pnt[1]+len(b)],mask*1)
+
+	return frame
+	 
+	# cv2.imshow("frame",frame)
+	# cv2.imshow("mask",np.array(mask*1*255,dtype=np.uint8))
+	# cv2.waitKey(0)
+	 
+
+# frame = np.random.randint(255,size=[480,640],dtype = np.uint8)
+# corners_pix = np.array([[200,300],[300,400], [500,300],[400,200],[200,300]  ])  
+# a = np.arange(100,450)+60 
+# b = np.arange(100,450) 
+# bounding_box = [a,b]  
+# draw_patch(frame,corners_pix,bounding_box)
+
+
+
+
+
 def find_tfmat_avg(T_cent_accepted):
 	Tf_cam_ball = np.eye(4)
 
@@ -224,58 +263,74 @@ def remove_bad_aruco_centers(center_transforms, mtx, dist):
 
 
 
-# def local_frame_grads (frame_gray, corners, ids): #### by arkadeep 
-# 	''' Takes in the frame, the corners of the markers the camera sees and ids of the markers seen. 
-# 	Returns the frame gradients
-# 	Input: frame_gray --> grayscale frame
-# 	corners: stacked as corners[num_markers,:,:] 
-# 	ids: ids seen
-# 	Output
-# 	frame_grad_u and frame_grad_v: matrices of sizes as frame gray. the areas near the markers will 
-# 	have gradients of the frame_gray frame in the same locations and rest is 0
-# 	'''
-# 	dilate_fac =1.2
-# 	frame_grad_u = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
-# 	frame_grad_v = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
-
-# 	for i in range(len(ids)):
-# 		expanded_corners = get_marker_borders(corners[i,:,:],dilate_fac)
-# 		v_low = int(np.min(expanded_corners[:,1]))
-# 		v_high = int(np.max(expanded_corners[:,1])) 
-# 		u_low = int(np.min(expanded_corners[:,0]))
-# 		u_high = int(np.max(expanded_corners[:,0]))
-
-# 		frame_local = np.copy(frame_gray[v_low:v_high,u_low:u_high]) # not sure if v and u are correct order
-
-# 		A,B = np.gradient(frame_local.astype('float32'))
-# 		frame_grad_v[v_low:v_high,u_low:u_high] = np.copy(A) 
-# 		frame_grad_u[v_low:v_high,u_low:u_high] = np.copy(B)
-# 	return  frame_grad_u, frame_grad_v
-
-def local_frame_grads(frame_gray, cent_R3, pix_width,mtx,dist):
-	''' takes in frame, gives gradient of the square centered at dodecahedron center
-		with size pix_width x pix_width
+def local_frame_grads (frame_gray, corners, ids): #### by arkadeep 
+	''' Takes in the frame, the corners of the markers the camera sees and ids of the markers seen. 
+	Returns the frame gradients
+	Input: frame_gray --> grayscale frame
+	corners: stacked as corners[num_markers,:,:] 
+	ids: ids seen
+	Output
+	frame_grad_u and frame_grad_v: matrices of sizes as frame gray. the areas near the markers will 
+	have gradients of the frame_gray frame in the same locations and rest is 0
 	'''
-	cent_R3 = cent_R3.reshape(1,3)
-	frame_copy_a = np.zeros(frame_gray.shape,dtype=np.float32)
-	frame_copy_b = np.zeros(frame_gray.shape,dtype=np.float32)
-	cent_pix, _ = cv2.projectPoints( cent_R3, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-	proj_point_int = np.ndarray.astype(cent_pix,int)	
-	proj_point_int = proj_point_int.reshape(2,)
-	local_frame = frame_gray[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
-   							 proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]
- 	a,b = np.gradient(local_frame)
- 
- 	frame_copy_a[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
-   				proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]  = a
+	dilate_fac =1.0
+	frame_grad_u = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
+	frame_grad_v = np.zeros((frame_gray.shape[0],frame_gray.shape[1]))
+	debug_temp_img = np.zeros((frame_gray.shape[0],frame_gray.shape[1]),dtype= np.uint8)
 
-	frame_copy_b[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
-   				proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]  = b
+	for i in range(len(ids)):
+		expanded_corners = get_marker_borders(corners[i,:,:],0.5)
+		v_low = int(np.min(expanded_corners[:,1]))
+		v_high = int(np.max(expanded_corners[:,1])) 
+		u_low = int(np.min(expanded_corners[:,0]))
+		u_high = int(np.max(expanded_corners[:,0]))
+		local_int_det = np.copy(frame_gray[v_low:v_high,u_low:u_high]) 
+		max_int_small_sect = np.max(local_int_det)
+
+
+		expanded_corners = get_marker_borders(corners[i,:,:],dilate_fac)
+		v_low = int(np.min(expanded_corners[:,1]))
+		v_high = int(np.max(expanded_corners[:,1])) 
+		u_low = int(np.min(expanded_corners[:,0]))
+		u_high = int(np.max(expanded_corners[:,0]))
+
+		frame_local = np.copy(frame_gray[v_low:v_high,u_low:u_high]) # not sure if v and u are correct order
+		max_int_large_sect= np.amax(frame_local)
+
+		frame_local = cv2.normalize(frame_local,None,alpha = 0, 
+			beta=255.0*max_int_large_sect/max_int_small_sect,norm_type=cv2.NORM_MINMAX)
+		A,B = np.gradient(frame_local.astype('float32'))
+		frame_grad_v[v_low:v_high,u_low:u_high] = np.copy(A) 
+		frame_grad_u[v_low:v_high,u_low:u_high] = np.copy(B)
+		debug_temp_img [v_low:v_high,u_low:u_high] = frame_local
+	cv2.imshow("debug_temp_img",debug_temp_img)
+	cv2.waitKey(1)
+	return  frame_grad_u, frame_grad_v
+
+# def local_frame_grads(frame_gray, cent_R3, pix_width,mtx,dist):
+# 	''' takes in frame, gives gradient of the square centered at dodecahedron center
+# 		with size pix_width x pix_width
+# 	'''
+# 	cent_R3 = cent_R3.reshape(1,3)
+# 	frame_copy_a = np.ones(frame_gray.shape,dtype=np.float32)*255
+# 	frame_copy_b = np.ones(frame_gray.shape,dtype=np.float32)*255
+# 	cent_pix, _ = cv2.projectPoints( cent_R3, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
+# 	proj_point_int = np.ndarray.astype(cent_pix,int)	
+# 	proj_point_int = proj_point_int.reshape(2,)
+# 	local_frame = frame_gray[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
+#    							 proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]
+ 						 
+#  	a,b = np.gradient(local_frame)
  
-   	frame_grad_show = np.copy(frame_copy_b)
-   	cv2.imshow("frame_grad_show",frame_grad_show)
-   	cv2.waitKey(1)
-   	return frame_copy_a,frame_copy_b			
+#  	frame_copy_a[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
+#    				proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]  = a
+
+# 	frame_copy_b[proj_point_int[1]-pix_width/2 : proj_point_int[1]+pix_width/2, 
+#    				proj_point_int[0]-pix_width/2 : proj_point_int[0]+pix_width/2]  = b
+ 
+#    	frame_grad_show = np.copy(frame_copy_b)
+ 
+#    	return frame_copy_a,frame_copy_b			
 
 def marker_edges(ids, downsample, edge_pts_in_img_sp, aruco_images_int16, img_pnts):
 	''' Function to give the edge points in the image and their intensities.
@@ -340,6 +395,7 @@ def get_marker_borders (corners,dilate_fac):
 	 
 	return expanded_corners
 
+
 def LM_DPR(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist):
 	''' Objective function for the DPR step. Takes in pose as the first arg [mandatory!!] and,
 	returns the value of the obj fun and jacobial of the obj fun'''    
@@ -364,12 +420,12 @@ def LM_DPR(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, a
 	
 	# testing_points = 10 
  	# LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 127)
-
+ 	# -profile do not put drawing stuff here save 13% time 
 	f_p = frame_gray[proj_points_int[:,1],proj_points_int[:,0]]  # TODO i dont think framegray int16 is needed ? Also 0,1 order changed
 	err = (edge_intensities_expected_stacked/1.0 - f_p.reshape(f_p.shape[0],1)/1.0) # this is the error in the intensities
 	return  err.reshape(err.shape[0],)
 
-def LM_DPR_DRAW(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist, col_gr = 127, rad=1):
+def LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist, col_gr = 127, rad=1):
 	''' Objective function for the DPR step. Takes in pose as the first arg [mandatory!!] and,
 	returns the value of the obj fun and jacobial of the obj fun'''    
 	Tf_cam_ball = RodriguesToTransf(X)
@@ -400,7 +456,7 @@ def LM_DPR_DRAW(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_a
 
 	f_p = frame_gray[proj_points_int[:,1],proj_points_int[:,0]]  # TODO i dont think framegray int16 is needed ? Also 0,1 order changed
 	err = (edge_intensities_expected_stacked - f_p.reshape(f_p.shape[0],1))/1.0 # this is the error in the intensities
-	return  err.reshape(err.shape[0],)
+	return  frame_gray_draw
 
 def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist):
 
@@ -429,10 +485,15 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
  	
 	# draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent_accepted[itr,0:3,3]),(0,255,255),2) 
  
-	# dI_by_dv,dI_by_du = local_frame_grads (frame_gray, np.vstack(corners), ids) ##TODO local frame gradients not working pl check ## arkadeep
-	# dI_by_dv,dI_by_du = local_frame_grads (frame_gray,X[3:6],300,mtx,dist) ##TODO local frame gradients ## tejas
+	dI_by_dv,dI_by_du = local_frame_grads (frame_gray, np.vstack(corners), ids) ##TODO local frame gradients not working pl check ## arkadeep
+	# dI_by_dv,dI_by_du = local_frame_grads (frame_gray.astype('float32'),X[3:6],250,mtx,dist) ##TODO local frame gradients ## tejas
+	# print dI_by_dv,"dI_by_dv"
+	# dI_by_dv,dI_by_du = np.gradient (frame_gray.astype('float32'))  ##  by arkadeep # -profile: 27.88% of time HAVE TO CHANGE
 	
-	dI_by_dv,dI_by_du = np.gradient (frame_gray.astype('float32'))  ##  by arkadeep # -profile: 27.88% of time HAVE TO CHANGE
+	dI_by_dv_draw_copy = np.copy(dI_by_dv) 
+ 	# dI_by_dv_draw_copy = LM_DPR_DRAW(X, dI_by_dv_draw_copy, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 0,5)
+ 	# cv2.imshow("dI_by_dv_draw_copy",dI_by_dv_draw_copy)
+ 	# cv2.waitKey(1)
 
 	n_int = proj_points_int.shape[0]
 	dI_by_dp = np.zeros((n_int,6))
@@ -462,6 +523,8 @@ def main():
 	marker_size_in_mm = 17.78
 	distance_betn_markers = 34.026  #in mm
 	dilate_fac = 1.2 # dilate the square around the marker
+	padding_fac = 1.2 # padding around the aruco source image
+
 	tip_coord  = np.array([3.97135363, -116.99921549 ,-5.32922903,1]) 
 
 	edge_pts_in_img_sp = [0]*13
@@ -470,7 +533,7 @@ def main():
 	img_pnts = [0]*13
 	for i in range(1,13):
 		edge_pts_in_img_sp[i] = np.loadtxt("thick_edge_coord_R3/id_{}.txt".format(i),delimiter=',',dtype=np.float32)
-		aruco_images[i]= cv2.imread("aruco_images_mip_maps/res_150_{}.jpg".format(i),0)
+		aruco_images[i]= cv2.imread("aruco_images_mip_maps/res_38_{}.jpg".format(i),0)
 		img_pnts[i] = np.loadtxt("thick_edge_coord_pixels/id_{}.txt".format(i),delimiter=',',dtype='int16')
 		aruco_images_int16[i] = np.int16(aruco_images[i])
 
@@ -664,16 +727,16 @@ def main():
 			# 	args = (frame_gray, ids, corners, b_edge, edge_intensities_expected,aruco_images) ) 
 			
 			if run_DPR_switch == 1:
-				# LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
-				# 			b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
+				LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
+							b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
 
 				res_DPR = leastsq (LM_DPR, res[0], Dfun= LM_DPR_Jacobian,full_output=1,   #### by Tejas 
 					col_deriv=0, ftol=1.49012e-6, xtol=1.49012e-4, gtol=0.0, 
 					maxfev=1000, epsfcn=None, factor=1, diag=None,
 					args = (frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist) ) 
 
-				# LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
-				# 			 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
+				LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
+							 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
 
 			else :
 				res_DPR = res
@@ -684,12 +747,12 @@ def main():
 			Tf_cam_ball = RodriguesToTransf(res_DPR[0])
 	 
 	 
-			px_sp,_ = cv2.projectPoints(np.reshape(res_DPR[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			temp1 = int(px_sp[0,0,0])
-			temp2 = int(px_sp[0,0,1])
-			cv2.circle(frame,(temp1,temp2), 5 , (0,255,255), 2)
+			# px_sp,_ = cv2.projectPoints(np.reshape(res_DPR[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
+			# temp1 = int(px_sp[0,0,0])
+			# temp2 = int(px_sp[0,0,1])
+			# cv2.circle(frame,(temp1,temp2), 5 , (0,255,255), 2)
 	 
-			# print(np.linalg.norm(res[0] - res_DPR[0], 2),"DPR Improvement")
+			print(np.linalg.norm(res[0] - res_DPR[0], 2),"DPR Improvement")
 
 			# angle_range = np.arange(-0.5,0.5,0.01)
 			# tra_range = angle_range*10
