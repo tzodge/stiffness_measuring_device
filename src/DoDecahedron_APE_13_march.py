@@ -65,10 +65,11 @@ def slerp(v0, v1, t_array):
 ####################
 
 
-## reference https://stackoverflow.com/questions/21339448/how-to-get-list-of-points-inside-a-polygon-in-python
 
 def patch_norm_and_grad(frame,frame_grad_u,frame_grad_v,corners_pix,bounding_box):
- 
+	''' patch making reference from
+	    https://stackoverflow.com/questions/21339448/how-to-get-list-of-points-inside-a-polygon-in-python
+ 	'''
 	a = bounding_box[0] 
 	b = bounding_box[1] 
 	start_pnt = [b[0],a[0]]
@@ -95,7 +96,7 @@ def patch_norm_and_grad(frame,frame_grad_u,frame_grad_v,corners_pix,bounding_box
 
 	# np.copyto(frame_gray_draw[start_pnt[0]:start_pnt[0]+len(a), start_pnt[1]:start_pnt[1]+len(b)],
 	# 	local_frame_grad_int8,where=mask)
-	
+
 	np.copyto(frame_grad_u[start_pnt[0]:start_pnt[0]+len(a), start_pnt[1]:start_pnt[1]+len(b)],
 		local_frame_grad_u,where=mask)
  
@@ -106,14 +107,7 @@ def patch_norm_and_grad(frame,frame_grad_u,frame_grad_v,corners_pix,bounding_box
 	# cv2.imshow("frame",frame)
 	# cv2.imshow("mask",np.array(mask*1*255,dtype=np.uint8))
 	return frame_grad_v,frame_grad_u
-# frame = np.random.randint(255,size=[480,640],dtype = np.uint8)
-# corners_pix = np.array([[200,300],[300,400], [500,300],[400,200],[200,300]  ])  
-# a = np.arange(100,450)+60 
-# b = np.arange(100,450) 
-# bounding_box = [a,b]  
-# draw_patch(frame,corners_pix,bounding_box)
-
-
+ 
 
 
 
@@ -498,15 +492,17 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
 
  	du_by_dp = griddata(proj_points,duvec_by_dp_all[0::2,0:6],(proj_points_int[:,0],proj_points_int[:,1]), method = 'nearest')
 	dv_by_dp = griddata(proj_points,duvec_by_dp_all[1::2,0:6],(proj_points_int[:,0],proj_points_int[:,1]), method = 'nearest')
-
- 
-
-
+	
+	# this is same as above - no it's not
+	# du_by_dp = duvec_by_dp_all[0::2,0:6]
+	# dv_by_dp = duvec_by_dp_all[1::2,0:6] 
+	# print np.linalg.norm(du_by_dp- du_by_dp_grid),"norm"
+	# print ""
 
 	dI_by_dv ,dI_by_du = local_frame_grads (frame_gray.astype('int16'), np.vstack(corners), ids) ##TODO local frame gradients not working pl check ## arkadeep
  	 
 
- 	LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 127,1)
+ 	# LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 127,1)
 
 
 	n_int = proj_points_int.shape[0]
@@ -525,15 +521,18 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
 
 def main():
 	global frame_gray_draw, frame_gray
-	img = cv2.imread('send_to_howard.png')
+	img = cv2.imread('sample_image_pntgrey.png')
 	h,  w = img.shape[:2]
 
-	sub_pix_refinement_switch = 3
+	sub_pix_refinement_switch = 1
+	plot_switch = 1
 	detect_tip_switch = 0
 	hist_plot_switch = 1
 	show_filter_switch = 1
 	show_ape_switch = 0
 	run_DPR_switch = 1
+
+
 
 	iterations_for_while =5500
 	marker_size_in_mm = 17.78
@@ -563,7 +562,7 @@ def main():
 	pose_marker_with_APE= np.zeros((iterations_for_while,6))
 	pose_marker_with_DPR= np.zeros((iterations_for_while,6))
 	pose_marker_without_opt = np.zeros((iterations_for_while,6))
-	#pose_marker_avg = np.zeros((iterations_for_while,6))
+ 
 
 	tip_posit = np.zeros((iterations_for_while,3))
 	color = [0]*iterations_for_while
@@ -595,7 +594,7 @@ def main():
 		  
 		frame = ic.cv_image
 
-		# print(frame)
+ 
 		if frame is None:
 			time.sleep(0.1)
 			print("No image")
@@ -606,12 +605,7 @@ def main():
 
 		frame_gray = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2GRAY)
 		frame_gray_draw = np.copy(frame_gray)
-		# cv2.imshow('frame_gray',frame)
-		# cv2.waitKey(0)
-		# frame_gray = frame_gray.astype('float32')/255
-		#lists of ids and the corners beloning to each id
-
-		# cv2.imshow('frame_color',frame)
+ 
 
 		# the first row will allways be [0,0,0] this is to ensure that we can start from face 1 which is actually face 0
 		rvecs = np.zeros((13,1,3))
@@ -624,8 +618,7 @@ def main():
 			N_markers =ids.shape[0]
 			frame = aruco.drawDetectedMarkers(frame, corners, ids)
 
-			# m is the index for marker ids
-			# draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array([[0.,0.,200.]])) 
+
 			jj = 0
 			# the following are with the camera frame
 			cent_in_R3 = np.zeros((N_markers,3))
@@ -639,24 +632,9 @@ def main():
 				T_cent[jj,:,:] = np.matmul(T_4_Aruco,T_mat_face_cent)
 				jj+=1
 			
-
-			if show_filter_switch == 1:
-				for itr in range(T_cent.shape[0]):	
-					draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent[itr,0:3,3]), mtx, dist) 	
-
+ 
 			T_cent_accepted, centers_R3, good_indices = remove_bad_aruco_centers(T_cent, mtx, dist)
 			
-			if show_filter_switch == 1:	
-				for itr in range(T_cent_accepted.shape[0]):
-					draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent_accepted[itr,0:3,3]), mtx, dist, (0,255,255),2) 
-				
-			# print T_cent_accepted," T_cent_accepted.shape"
-			# print good_indices,"good_indices"
-			# print centers_R3,"centers_R3"
-
-
-			# Tf_cam_ball = np.mean(T_cent_accepted,axis=0)   ########## by arkadeep
-
 			Tf_cam_ball= find_tfmat_avg (T_cent_accepted) ########## by tejas
 
 
@@ -678,124 +656,30 @@ def main():
 			pose_marker_with_APE[j,:] = np.reshape(res[0],(1,6))
 			Tf_cam_ball = RodriguesToTransf(res[0])
 
-			# sq_len = 35.
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[sq_len,sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[-sq_len,sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[-sq_len,-sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[sq_len,-sq_len,0]),(0,255,255),2) 
-
-
-	###############################################################################################################################
-	################# this part is for projecting the corner points on the
-	################# frame
-	#################
-			# px_sp,_ = cv2.projectPoints(np.reshape(res[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			# temp1 = int(px_sp[0,0,0])
-			# temp2 = int(px_sp[0,0,1])
-			# if show_ape_switch == 1:
-			# 	cv2.circle(frame,(temp1,temp2), 8 , (0,0,255), 3)
-			# no_of_accepted_points = len(good_indices) 
-						 
-			# if no_of_accepted_points is not 0:
-			# 	px_sp,_ = cv2.projectPoints(np.reshape(t_vec_aruco,(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			# 	temp1 = int(px_sp[0,0,0])
-			# 	temp2 = int(px_sp[0,0,1])
-			# 	# cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
-
-			# N_corners = ids.shape[0]
-			
-			
-			# corners_in_cart_sp = np.zeros((ids.shape[0],4,3))
-			
-			# for ii in range(ids.shape[0]):
-			# 	Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
-			# 	corners_in_cart_sp[ii,:,:] = Tf_cam_ball.dot(corners_3d(Tf_cent_face,marker_size_in_mm)).T[:,0:3]
-			
-			# corners_in_cart_sp = corners_in_cart_sp.reshape(ids.shape[0]*4,3)
-			# projected_in_pix_sp,_ = cv2.projectPoints(corners_in_cart_sp,np.zeros((3,1)),np.zeros((3,1)),mtx,dist) 
-			# projected_in_pix_sp = projected_in_pix_sp.reshape(projected_in_pix_sp.shape[0],2)
-			
-			# projected_in_pix_sp_int = np.int16(projected_in_pix_sp)
-			# print Tf_cam_ball,"after APE"
-			# for iii in range(projected_in_pix_sp_int.shape[0]):
-			# 	cv2.circle(frame,(projected_in_pix_sp_int[iii,0],projected_in_pix_sp_int[iii,1]), 5 , (0,255,0),-1)
-			# 	cv2.circle(frame,(stacked_corners_px_sp[iii,0],stacked_corners_px_sp[iii,1]), 3 , (255,0,0),-1)
-	###############################################################################################################################
-			
-
-
-		# test for DPR
-			# print(np.vstack(corners).shape,'np.asarray(corners)')
-			# frame_grad_u,frame_grad_v = local_frame_grads (frame_gray, np.vstack(corners), ids)
-			# cv2.imshow('frame_grad_u',frame_grad_v)
-			# cv2.imshow("DPR frame", frame_gray)
-			# cv2.waitKey(0)
+			 
 
 			b_edge, edge_intensities_expected =  marker_edges(ids,points_for_DPR,edge_pts_in_img_sp,aruco_images_int16,img_pnts)
-	 
-			# res_DPR = leastsq (LM_DPR,res[0], Dfun= LM_DPR_Jacobian, full_output=0, #### by arkadeep   
-			# 	col_deriv=0, ftol=1.49012e-8, xtol=1.49012e-8, gtol=0.0, 
-			# 	maxfev=1000, epsfcn=None, factor=1, diag=None, 
-			# 	args = (frame_gray, ids, corners, b_edge, edge_intensities_expected,aruco_images) ) 
+ 
 			
 			if run_DPR_switch == 1:
-				LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
-							b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
+				# LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
+				# 			b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
 
 				res_DPR = leastsq (LM_DPR, res[0], Dfun= LM_DPR_Jacobian,full_output=1,   #### by Tejas 
 					col_deriv=0, ftol=1.49012e-10, xtol=1.49012e-4, gtol=0.0, 
 					maxfev=1000, epsfcn=None, factor=1, diag=None,
 					args = (frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist) ) 
 
-				LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
-							 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
+				# LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
+				# 			 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
 
 			else :
 				res_DPR = res
 
-			print res_DPR[2]["nfev"],"res_DPR[2].nfev"	
-			print res_DPR[3],"message"
+ 
 			pose_marker_with_DPR[j,:] = np.reshape(res_DPR[0],(1,6))
-
 			Tf_cam_ball = RodriguesToTransf(res_DPR[0])
-	 
-	 
-			# px_sp,_ = cv2.projectPoints(np.reshape(res_DPR[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			# temp1 = int(px_sp[0,0,0])
-			# temp2 = int(px_sp[0,0,1])
-			# cv2.circle(frame,(temp1,temp2), 5 , (0,255,255), 2)
-	 
-			print(np.linalg.norm(res[0] - res_DPR[0], 2),"DPR Improvement")
-
-			# angle_range = np.arange(-0.5,0.5,0.01)
-			# tra_range = angle_range*10
-			# obj_func_val = np.zeros((tra_range.shape[0],6))
-			# for ii in range(tra_range.shape[0]):
-			# 	obj_func_val[ii,0] = LM_DPR(res[0] + np.array([angle_range[ii],0.,0.,0.,0.,0.]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# 	obj_func_val[ii,1] = LM_DPR(res[0] + np.array([0.,angle_range[ii],0.,0.,0.,0.]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# 	obj_func_val[ii,2] = LM_DPR(res[0] + np.array([0.,0.,angle_range[ii],0.,0.,0.]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# 	obj_func_val[ii,3] = LM_DPR(res[0] + np.array([0.,0.,0.,tra_range[ii],0.,0.]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# 	obj_func_val[ii,4] = LM_DPR(res[0] + np.array([0.,0.,0.,0.,tra_range[ii],0.]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# 	obj_func_val[ii,5] = LM_DPR(res[0] + np.array([0.,0.,0.,0.,0.,tra_range[ii]]), frame_gray, ids,  b_edge, edge_intensities_expected,aruco_images).sum()
-			# fig1 = plt.figure()
-			# plt.scatter(angle_range[:],obj_func_val[:,0],s = 5,label = "ang0")
-			# plt.scatter(angle_range[:],obj_func_val[:,1],s = 5,label = "ang1")
-			# plt.scatter(angle_range[:],obj_func_val[:,2],s = 5,label = "ang2")
-			# plt.legend()
-			# plt.show()
-
-			# fig1 = plt.figure()
-			# plt.scatter(tra_range[:],obj_func_val[:,3],s = 5,label = "tra0")
-			# plt.scatter(tra_range[:],obj_func_val[:,4],s = 5,label = "tra1")
-			# plt.scatter(tra_range[:],obj_func_val[:,5],s = 5,label = "tra2")
-			# plt.legend()
-			# plt.show()
-
-			t_new = time.time() 
+ 			t_new = time.time() 
 			print("current frame rate",1./(t_new - t_prev))
 
 			t_prev = t_new
@@ -826,40 +710,64 @@ def main():
 
 	pose_marker_with_DPR= pose_marker_with_DPR[0:j,:]
 	pose_marker_without_opt = pose_marker_without_opt[0:j,:]
-	#pose_marker_avg = pose_marker_avg[0:j,:]
 	tip_posit = tip_posit[0:j,:]
 
 
+	r2d = 180/np.pi
 
-	fig = plt.figure()
-	ax = fig.add_subplot(111, projection="3d")
 
-	ax.set_xlabel('X Label')
-	ax.set_ylabel('Y Label')
-	ax.set_zlabel('Z Label')
+	if plot_switch == 1 : 
+		### translation
+		fig = plt.figure()
 
-	if detect_tip_switch == 1:
-	#    print (np.std(tip_posit,axis=0), "std in x,y,z")q
-		ax.scatter(tip_posit[:,0],tip_posit[:,1],tip_posit[:,2],c=color)
-	else: 
-		print ("the end")
-		ax.scatter(pose_marker_without_opt[:,3],pose_marker_without_opt[:,4],pose_marker_without_opt[:,5],c ='m',label = "pose_marker_without_opt")
+		ax = fig.add_subplot(111, projection="3d")
+		fig.canvas.set_window_title("translation x,y,z") 
 
-		# fig = plt.figure()
-		# ax = fig.add_subplot(111, projection="3d")
-
-		ax.scatter(pose_marker_with_APE[:,3],pose_marker_with_APE[:,4],pose_marker_with_APE[:,5],c = 'r',label="pose_marker_with_APE" )
-		ax.scatter(pose_marker_with_DPR[:,3],pose_marker_with_DPR[:,4],pose_marker_with_DPR[:,5],c = 'g',label="pose_marker_with_DPR" )
+		ax.set_xlabel('X Label')
+		ax.set_ylabel('Y Label')
+		ax.set_zlabel('Z Label')
+		ax.scatter(pose_marker_without_opt[:,3],pose_marker_without_opt[:,4],pose_marker_without_opt[:,5],
+							c ='m',label = "pose_marker_without_opt")
+		ax.scatter(pose_marker_with_APE[:,3],pose_marker_with_APE[:,4],pose_marker_with_APE[:,5],
+							c = 'r',label="pose_marker_with_APE" )
+		ax.scatter(pose_marker_with_DPR[:,3],pose_marker_with_DPR[:,4],pose_marker_with_DPR[:,5],
+							c = 'g',label="pose_marker_with_DPR" )
 		ax.legend()
 		
-		# plt.axis('equal')
-	if hist_plot_switch == 1:
+		### rotation
 		fig = plt.figure()
+		fig.canvas.set_window_title("rotation x,y,z") 
+
+		ax.set_xlabel('X Label')
+		ax.set_ylabel('Y Label')
+		ax.set_zlabel('Z Label')
+		ax = fig.add_subplot(111, projection="3d")
+		ax.scatter(pose_marker_without_opt[:,0]*r2d, pose_marker_without_opt[:,1]*r2d, pose_marker_without_opt[:,2]*r2d,
+							c ='m',label = "orientation_marker_without_opt")
+		ax.scatter(pose_marker_with_APE[:,0]*r2d, pose_marker_with_APE[:,1]*r2d, pose_marker_with_APE[:,2]*r2d,
+							c = 'r',label="orientation_marker_with_APE" )
+		ax.scatter(pose_marker_with_DPR[:,0]*r2d, pose_marker_with_DPR[:,1]*r2d, pose_marker_with_DPR[:,2]*r2d,
+							c = 'g',label="orientation_marker_with_DPR" )
+		ax.legend()
+
+ 
+	if hist_plot_switch == 1:
+
+		fig = plt.figure()
+		fig.canvas.set_window_title("histogram translation z") 
 		plt.hist(pose_marker_without_opt[:,5],j,facecolor='magenta',normed = 1,label = 'pose_marker_without_opt' )
-		# fig = plt.figure()
 		plt.hist(pose_marker_with_APE[:,5],j,facecolor='red',normed = 1, label = 'pose_marker_with_APE'  )
 		plt.hist(pose_marker_with_DPR[:,5],j,facecolor='green',normed = 1, label = 'pose_marker_with_DPR'  )
 		plt.legend()
+		
+		fig = plt.figure()
+		fig.canvas.set_window_title("histogram rotation z") 
+		plt.hist(pose_marker_without_opt[:,2]*r2d,j,facecolor='magenta',normed = 1,label = 'orientation_marker_without_opt' )
+		plt.hist(pose_marker_with_APE[:,2]*r2d,j,facecolor='red',normed = 1, label = 'orientation_marker_with_APE'  )
+		plt.hist(pose_marker_with_DPR[:,2]*r2d,j,facecolor='green',normed = 1, label = 'orientation_marker_with_DPR'  )
+		plt.legend()
+
+		print ("the end")
 
 	plt.show()
 
