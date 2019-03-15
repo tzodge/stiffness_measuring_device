@@ -141,6 +141,7 @@ def RodriguesToTransf(x):
 	Output: Transf -> SE(3) rotation matrix
 	'''
 	x = np.array(x)
+	x = x.reshape(6,)
 	rot,_ = cv2.Rodrigues(x[0:3])
 	trans =  np.reshape(x[3:6],(3,1))
 	Transf = np.concatenate((rot,trans),axis = 1)
@@ -690,7 +691,7 @@ def main():
 			cv2.imshow('frame_gray_draw',frame_gray_draw)
 			# cv2.imshow('frame_gray',frame_gray)
 			# cv2.imshow('data.aruco_images',data.aruco_images[ids[0]])
-			cv2.imshow('frame_color',frame)
+			# cv2.imshow('frame_color',frame)
 			j+=1
 			if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
 				break
@@ -765,7 +766,7 @@ def main():
 	plt.show()
 
 
-	
+
 
 if __name__ == '__main__':
 	main()
