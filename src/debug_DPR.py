@@ -16,6 +16,8 @@ import time
 from scipy.optimize import minimize, leastsq,least_squares
 from scipy import linalg
 from scipy.spatial import distance
+from scipy.interpolate import griddata
+
 import rospy
 from roscam import RosCam
 from matplotlib.path import Path
@@ -144,6 +146,7 @@ def RodriguesToTransf(x):
 	Output: Transf -> SE(3) rotation matrix
 	'''
 	x = np.array(x)
+	x = x.reshape(6,)
 	rot,_ = cv2.Rodrigues(x[0:3])
 	trans =  np.reshape(x[3:6],(3,1))
 	Transf = np.concatenate((rot,trans),axis = 1)
@@ -190,6 +193,9 @@ def tf_mat_dodeca_pen(face_id):
 	_R_cent_face_curr = _R_cent_face[face_id-1,:,:]
 	T_mat_cent_face = np.vstack((np.hstack((_R_cent_face_curr,T_cent_face_curr)),np.array([0,0,0,1])))
 	T_mat_face_cent = np.vstack((np.hstack((_R_cent_face_curr.T,-_R_cent_face_curr.T.dot(T_cent_face_curr))),np.array([0,0,0,1])))
+	
+	### for debugging
+	T_mat_cent_face, T_mat_face_cent  = np.eye(4), np.eye(4)
 	return T_mat_cent_face,T_mat_face_cent
 
 def corners_3d(tf_mat,m_s):
@@ -324,9 +330,9 @@ def local_frame_grads (frame_gray, corners, ids): #### by arkadeep
 
 		# frame_local = cv2.normalize(frame_local,None,alpha = 0, 
 		# 	beta=255.0*max_int_large_sect/max_int_small_sect,norm_type=cv2.NORM_MINMAX)
-		# A,B = np.gradient(frame_gray )   
-		# frame_grad_v  = np.copy(A) 
-		# frame_grad_u  = np.copy(B)
+		A,B = np.gradient(frame_gray.astype('int16') )   
+		frame_grad_v  = np.copy(A) 
+		frame_grad_u  = np.copy(B)
 		# cv2.imshow("full frame gradient",frame_grad_v.astype(np.uint8))		
 
 		# A,B = np.gradient(frame_local)
@@ -334,8 +340,8 @@ def local_frame_grads (frame_gray, corners, ids): #### by arkadeep
 		# frame_grad_u[v_low:v_high,u_low:u_high] = np.copy(B)
 		# cv2.imshow("local frame gradient",frame_grad_v.astype(np.uint8))		
 
-		frame_grad_v, frame_grad_u = patch_norm_and_grad(frame_gray,frame_grad_u_temp,frame_grad_v_temp,
-			expanded_corners_small,[np.arange(u_low,u_low+sq_dim),np.arange(v_low,v_low+sq_dim)])
+		# frame_grad_v, frame_grad_u = patch_norm_and_grad(frame_gray,frame_grad_u_temp,frame_grad_v_temp,
+		# 	expanded_corners_small,[np.arange(u_low,u_low+sq_dim),np.arange(v_low,v_low+sq_dim)])
 		# cv2.imshow("patched and normalised gradient",frame_grad_v.astype(np.uint8))		
 		
 		# cv2.waitKey(0)
@@ -355,6 +361,7 @@ def marker_edges(ids, downsample, edge_pts_in_img_sp, aruco_images_int16, img_pn
 	'''
 	b_edge = []
 	edge_intensities_expected = []
+ 
 
 	for aruco_id in ids:
 		b = edge_pts_in_img_sp[aruco_id[0]]
@@ -376,8 +383,8 @@ def marker_edges(ids, downsample, edge_pts_in_img_sp, aruco_images_int16, img_pn
 	# 	print img_pnts[ids[j][0]].shape,"img_pnts.shape"
 	# 	for i in range(n_int):
 	# 		center_2 = tuple(np.ndarray.astype(np.array([img_pnts_curr[i,0]+60,img_pnts_curr[i,1]+60]),int))
-	# 		cv2.circle( aruco_images[ids[j][0]], center_2 , 3 , 127, -1)
-	# 	cv2.imshow("aruco_images[ids_{}]".format(ids[j][0]),aruco_images[ids[j][0]])
+	# 		cv2.circle( aruco_images_int16[ids[j][0]], center_2 , 3 , 127, -1)
+	# 	cv2.imshow("aruco_images[ids_{}]".format(ids[j][0]),np.asarray(aruco_images_int16[ids[j][0]],dtype = np.uint8))
 	# 	cv2.waitKey(0)	
 
 	# print edge_intensities_expected[0]," edge_intensities_expected[{}]".format(ids[0][0])
@@ -438,7 +445,7 @@ def LM_DPR(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, a
 	err = (edge_intensities_expected_stacked/1.0 - f_p.reshape(f_p.shape[0],1)/1.0) # this is the error in the intensities
 	return  err.reshape(err.shape[0],)
 
-def LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist, col_gr = 127, rad=1):
+def LM_DPR_DRAW(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist, col_gr = 127, rad=1):
 	''' Objective function for the DPR step. Takes in pose as the first arg [mandatory!!] and,
 	returns the value of the obj fun and jacobial of the obj fun'''    
 	Tf_cam_ball = RodriguesToTransf(X)
@@ -474,39 +481,36 @@ def LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expec
 def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expected_all, aruco_images, mtx, dist):
 
 	'''Function to calculate the Jacobian of the objective function'''
-
+	print X
 	Tf_cam_ball = RodriguesToTransf(X)
 	borders_in_cart_sp = []
 	edge_intensities_expected = []
 	for ii in range(ids.shape[0]):
 		Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
 		# borders_in_cart_sp.append((Tf_cam_ball.dot(b_edge[ii].T)).T)  ### by arkadeep
-		borders_in_cart_sp.append((Tf_cam_ball.dot(Tf_cent_face).dot(b_edge[ii].T)).T)  ### added by tejas
+		borders_in_cart_sp.append(( Tf_cent_face.dot(b_edge[ii].T)).T)  ### added by tejas
 
 		edge_intensities_expected.append(edge_intensities_expected_all[ii].reshape(edge_intensities_expected_all[ii].shape[0],1))
 
 	stacked_borders_in_cart_sp = np.vstack(borders_in_cart_sp)
 	edge_intensities_expected_stacked = np.vstack(edge_intensities_expected)
-	proj_points , duvec_by_dp_all = cv2.projectPoints( stacked_borders_in_cart_sp [:,0:3], np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
+	proj_points , duvec_by_dp_all = cv2.projectPoints( stacked_borders_in_cart_sp [:,0:3], X[0][0:3],X[0][3:6], mtx, dist)
 	proj_points_int = np.ndarray.astype(proj_points,int) # -profile this is taking some time (5.5% of total time)
 
+	proj_points = proj_points.reshape(proj_points.shape[0],2)
 	proj_points_int = proj_points_int.reshape(proj_points_int.shape[0],2)
 
-	du_by_dp = duvec_by_dp_all[0::2,0:6]
-	# dv_by_dp = duvec_by_dp_all[0::1,0:6]  ### by arkadeep
-	dv_by_dp = duvec_by_dp_all[1::2,0:6]  ### edited by tejas
- 	
-	# draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent_accepted[itr,0:3,3]),(0,255,255),2) 
+
+
+	du_by_dp = griddata(proj_points,duvec_by_dp_all[0::2,0:6],(proj_points_int[:,0],proj_points_int[:,1]), method = 'nearest')
+	dv_by_dp = griddata(proj_points,duvec_by_dp_all[1::2,0:6],(proj_points_int[:,0],proj_points_int[:,1]), method = 'nearest')
+	 
+
+ 	dI_by_dv,dI_by_du = np.gradient(frame_gray.astype('int16'))	  
+	 
  
-	dI_by_dv ,dI_by_du = local_frame_grads (frame_gray, np.vstack(corners), ids) ##TODO local frame gradients not working pl check ## arkadeep
-	# dI_by_dv,dI_by_du = local_frame_grads (frame_gray.astype('float32'),X[3:6],250,mtx,dist) ##TODO local frame gradients ## tejas
-	# print dI_by_dv,"dI_by_dv"
-	# dI_by_dv,dI_by_du = np.gradient (frame_gray.astype('float32'))  ##  by arkadeep # -profile: 27.88% of time HAVE TO CHANGE
-	
-	dI_by_dv_draw_copy = np.copy(dI_by_dv) 
- 	# LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 127,1)
- 	# cv2.imshow("dI_by_dv_draw_copy",dI_by_dv_draw_copy)
- 	# cv2.waitKey(1)
+ 	LM_DPR_DRAW(X, frame_gray_draw, ids, corners, b_edge, edge_intensities_expected_all,aruco_images, mtx, dist, 127,1)
+ 
 
 	n_int = proj_points_int.shape[0]
 	dI_by_dp = np.zeros((n_int,6))
@@ -514,12 +518,10 @@ def LM_DPR_Jacobian(X, frame_gray, ids, corners, b_edge, edge_intensities_expect
 
 	for i in range(n_int):
 		ui,vi = proj_points_int[i,0], proj_points_int[i,1]
-		# dI_by_dp[i,:] = dI_by_du [ui,vi] * du_by_dp[i] + dI_by_dv [ui,vi] * dv_by_dp[i] #TODO confirn [u,v] order in eqn  # by arkadeep
-		dI_by_dp[i,:] = dI_by_du [vi,ui] * du_by_dp[i] + dI_by_dv [vi,ui] * dv_by_dp[i] #TODO confirn [u,v] order in eqn  #edited  by tejas
-	print dI_by_dp,"dI_by_dp"
-	print ""
-	print ""
-	return dI_by_dp  # the neg sign is required
+		dI_by_dp[i,:] = dI_by_du [vi,ui] * du_by_dp[i] + \
+						dI_by_dv [vi,ui] * dv_by_dp[i] 
+ 
+	return  -dI_by_dp  # the neg sign is required
 
 ######
 
@@ -536,7 +538,7 @@ def main():
 	show_ape_switch = 0
 	run_DPR_switch = 1
 
-	iterations_for_while =5500
+	iterations_for_while =1
 	marker_size_in_mm = 17.78
 	distance_betn_markers = 34.026  #in mm
 	dilate_fac = 1.2 # dilate the square around the marker
@@ -550,11 +552,11 @@ def main():
 	img_pnts = [0]*13
 	for i in range(1,13):
 		edge_pts_in_img_sp[i] = np.loadtxt("thick_edge_coord_R3/id_{}.txt".format(i),delimiter=',',dtype=np.float32)
-		aruco_images[i]= cv2.imread("aruco_images_mip_maps/res_75_{}.jpg".format(i),0)
+		aruco_images[i]= cv2.imread("aruco_images_mip_maps/res_38_{}.jpg".format(i),0)
 		img_pnts[i] = np.loadtxt("thick_edge_coord_pixels/id_{}.txt".format(i),delimiter=',',dtype='int16')
 		aruco_images_int16[i] = np.int16(aruco_images[i])
 
-
+ 
 
 	with np.load('PTGREY.npz') as X:
 		mtx, dist = [X[i] for i in ('mtx','dist')] 
@@ -569,7 +571,7 @@ def main():
 	tip_posit = np.zeros((iterations_for_while,3))
 	color = [0]*iterations_for_while
 
-
+	#### parameters
 	aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
 	parameters =  aruco.DetectorParameters_create()
 	parameters.cornerRefinementMethod = sub_pix_refinement_switch
@@ -586,15 +588,16 @@ def main():
 
 
 
-	cv2.namedWindow('image',cv2.WINDOW_NORMAL)
-	rospy.init_node('RosCam', anonymous=True)
-	ic = RosCam("/camera/image_color")
+	# cv2.namedWindow('image',cv2.WINDOW_NORMAL)
+	# rospy.init_node('RosCam', anonymous=True)
+	# ic = RosCam("/camera/image_color")
 
 
 	t_prev = time.time()
 	while(j<iterations_for_while):
-		  
-		frame = ic.cv_image
+		    
+		# frame = ic.cv_image
+		frame = cv2.imread("sample_image_pntgrey.png",0)
 
 		# print(frame)
 		if frame is None:
@@ -605,7 +608,8 @@ def main():
 		# mtx = newcameramtx #### ??????
 
 
-		frame_gray = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2GRAY)
+		# frame_gray = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2GRAY)
+		frame_gray = np.copy(frame)  
 		frame_gray_draw = np.copy(frame_gray)
 		# cv2.imshow('frame_gray',frame)
 		# cv2.waitKey(0)
@@ -619,8 +623,9 @@ def main():
 		tvecs = np.zeros((13,1,3))
 		# 
 		corners, ids, rejectedImgPoints = aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
-	 
-		if ids not in markers_impossible and ids is not None and len(ids) >= 2: 
+	 	print  ids," ids"
+		# if ids not in markers_impossible and ids is not None and len(ids) >= 2: 
+		if ids[0] ==7: 
 			t0 = time.time()
 			N_markers =ids.shape[0]
 			frame = aruco.drawDetectedMarkers(frame, corners, ids)
@@ -641,25 +646,26 @@ def main():
 				jj+=1
 			
 
-			if show_filter_switch == 1:
-				for itr in range(T_cent.shape[0]):	
-					draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent[itr,0:3,3]), mtx, dist) 	
+			# if show_filter_switch == 1:
+			# 	for itr in range(T_cent.shape[0]):	
+			# 		draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent[itr,0:3,3]), mtx, dist) 	
 
-			T_cent_accepted, centers_R3, good_indices = remove_bad_aruco_centers(T_cent, mtx, dist)
+			# T_cent_accepted, centers_R3, good_indices = remove_bad_aruco_centers(T_cent, mtx, dist)
 			
-			if show_filter_switch == 1:	
-				for itr in range(T_cent_accepted.shape[0]):
-					draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent_accepted[itr,0:3,3]), mtx, dist, (0,255,255),2) 
+			# if show_filter_switch == 1:	
+			# 	for itr in range(T_cent_accepted.shape[0]):
+			# 		draw_3d_point(frame,np.zeros((6,),dtype=np.float32),np.array(T_cent_accepted[itr,0:3,3]), mtx, dist, (0,255,255),2) 
 				
-			# print T_cent_accepted," T_cent_accepted.shape"
-			# print good_indices,"good_indices"
-			# print centers_R3,"centers_R3"
+			# # print T_cent_accepted," T_cent_accepted.shape"
+			# # print good_indices,"good_indices"
+			# # print centers_R3,"centers_R3"
 
 
-			# Tf_cam_ball = np.mean(T_cent_accepted,axis=0)   ########## by arkadeep
+			# # Tf_cam_ball = np.mean(T_cent_accepted,axis=0)   ########## by arkadeep
 
-			Tf_cam_ball= find_tfmat_avg (T_cent_accepted) ########## by tejas
-
+			# Tf_cam_ball= find_tfmat_avg (T_cent_accepted) ########## by tejas
+ 
+			Tf_cam_ball = T_cent[0]
 
 			# getting the rvecs and t vecs by averaging
 			r_vec_aruco,_ = cv2.Rodrigues(Tf_cam_ball[0:3,0:3])
@@ -669,97 +675,75 @@ def main():
 			X_guess = np.append(r_vec_aruco,np.reshape(t_vec_aruco,(3,1))).reshape(6,1)
 			pose_marker_without_opt[j,:] = X_guess.T # not efficient. May have to change
 
-			
-			t0 = time.time()
-			res = leastsq (LM_APE_Dodecapen,X_guess,Dfun=None, full_output=0, 
-				col_deriv=0, ftol=1.49012e-6, xtol=1.49012e-4, gtol=0.0, 
-				maxfev=1000, epsfcn=None, factor=1, diag=None, 
-				args = (stacked_corners_px_sp, ids, marker_size_in_mm, mtx, dist, False)) 
-			
-			pose_marker_with_APE[j,:] = np.reshape(res[0],(1,6))
-			Tf_cam_ball = RodriguesToTransf(res[0])
+ 			res = [0]
+ 			pert = np.zeros((6,1))
+ 			pert[3,0],pert[4,0],pert[5,0] = 0.0,2,0.0
 
-			# sq_len = 35.
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[sq_len,sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[-sq_len,sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[-sq_len,-sq_len,0]),(0,255,255),2) 
-			# draw_3d_point(frame_gray_draw,np.zeros((6,),dtype=np.float32),
-			# 		np.array(T_cent_accepted[itr,0:3,3]+[sq_len,-sq_len,0]),(0,255,255),2) 
-
-
-	###############################################################################################################################
-	################# this part is for projecting the corner points on the
-	################# frame
-	#################
-			# px_sp,_ = cv2.projectPoints(np.reshape(res[0][3:6],(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			# temp1 = int(px_sp[0,0,0])
-			# temp2 = int(px_sp[0,0,1])
-			# if show_ape_switch == 1:
-			# 	cv2.circle(frame,(temp1,temp2), 8 , (0,0,255), 3)
-			# no_of_accepted_points = len(good_indices) 
-						 
-			# if no_of_accepted_points is not 0:
-			# 	px_sp,_ = cv2.projectPoints(np.reshape(t_vec_aruco,(3,1)).T, np.zeros((3,1)), np.zeros((3,1)), mtx, dist)
-			# 	temp1 = int(px_sp[0,0,0])
-			# 	temp2 = int(px_sp[0,0,1])
-			# 	# cv2.circle(frame,(temp1,temp2), 10 , (0,255,0), 2)
-
-			# N_corners = ids.shape[0]
-			
-			
-			# corners_in_cart_sp = np.zeros((ids.shape[0],4,3))
-			
-			# for ii in range(ids.shape[0]):
-			# 	Tf_cent_face,Tf_face_cent = tf_mat_dodeca_pen(int(ids[ii]))
-			# 	corners_in_cart_sp[ii,:,:] = Tf_cam_ball.dot(corners_3d(Tf_cent_face,marker_size_in_mm)).T[:,0:3]
-			
-			# corners_in_cart_sp = corners_in_cart_sp.reshape(ids.shape[0]*4,3)
-			# projected_in_pix_sp,_ = cv2.projectPoints(corners_in_cart_sp,np.zeros((3,1)),np.zeros((3,1)),mtx,dist) 
-			# projected_in_pix_sp = projected_in_pix_sp.reshape(projected_in_pix_sp.shape[0],2)
-			
-			# projected_in_pix_sp_int = np.int16(projected_in_pix_sp)
-			# print Tf_cam_ball,"after APE"
-			# for iii in range(projected_in_pix_sp_int.shape[0]):
-			# 	cv2.circle(frame,(projected_in_pix_sp_int[iii,0],projected_in_pix_sp_int[iii,1]), 5 , (0,255,0),-1)
-			# 	cv2.circle(frame,(stacked_corners_px_sp[iii,0],stacked_corners_px_sp[iii,1]), 3 , (255,0,0),-1)
-	###############################################################################################################################
-			
-
-
-		# test for DPR
-			# print(np.vstack(corners).shape,'np.asarray(corners)')
-			# frame_grad_u,frame_grad_v = local_frame_grads (frame_gray, np.vstack(corners), ids)
-			# cv2.imshow('frame_grad_u',frame_grad_v)
-			# cv2.imshow("DPR frame", frame_gray)
-			# cv2.waitKey(0)
-
+ 			res[0] = X_guess + pert*1
+ 
 			b_edge, edge_intensities_expected =  marker_edges(ids,points_for_DPR,edge_pts_in_img_sp,aruco_images_int16,img_pnts)
-	 
+	 		
 			# res_DPR = leastsq (LM_DPR,res[0], Dfun= LM_DPR_Jacobian, full_output=0, #### by arkadeep   
 			# 	col_deriv=0, ftol=1.49012e-8, xtol=1.49012e-8, gtol=0.0, 
 			# 	maxfev=1000, epsfcn=None, factor=1, diag=None, 
 			# 	args = (frame_gray, ids, corners, b_edge, edge_intensities_expected,aruco_images) ) 
 			
-			if run_DPR_switch == 1:
-				LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
-							b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
+##################################################################################################
+########################################## doing DPR from scratch ################################
+################################################################################################## 
+			res_DPR = [0,0]
+			print res[0].T,"res[0].T"
+			res_DPR[0] = res[0].T
+			for i in range(50):
+ 				print res_DPR[0],"res_DPR[0]"
+				LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist)
 
-				res_DPR = leastsq (LM_DPR, res[0], Dfun= LM_DPR_Jacobian,full_output=1,   #### by Tejas 
-					col_deriv=0, ftol=1.49012e-10, xtol=1.49012e-4, gtol=0.0, 
-					maxfev=1000, epsfcn=None, factor=1, diag=None,
-					args = (frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist) ) 
+				cv2.imshow("frame_gray_draw",frame_gray_draw)
+				cv2.waitKey(0)
+				err= LM_DPR(res_DPR[0], frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist)
+				print err.shape,"err.shape"
+				J = LM_DPR_Jacobian(res_DPR[0], frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist)
+ 				# print J.shape,"J.shape"
+ 				# print J.T.dot(J),"J.T.dot(J)"
+ 				dp = np.linalg.inv(J.T.dot(J)).dot(J.T.dot(err))
+ 				# print dp,"dp"
+ 				res_DPR[0] = res_DPR[0] - dp
+ 				print i,"itr GN"
+ 				print "."
+ 				print "."
 
-				LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
-							 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
 
-			else :
-				res_DPR = res
+ 			print "party"
+ 			print res_DPR[0] - res[0].T,"res_DPR[0] - res[0].T"		
 
-			print res_DPR[2]["nfev"],"res_DPR[2].nfev"	
-			print res_DPR[3],"message"
+
+
+
+
+
+
+##################################################################################################
+########################################## doing DPR from scratch ################################
+##################################################################################################
+
+			# if run_DPR_switch == 1:
+			# 	LM_DPR_DRAW(res[0], frame_gray_draw, ids, corners,            # drawing points as result of APE 
+			# 				b_edge, edge_intensities_expected,aruco_images, mtx, dist, 250,2)
+
+			# 	res_DPR = leastsq (LM_DPR, res[0], Dfun= LM_DPR_Jacobian,full_output=1,   #### by Tejas 
+			# 		col_deriv=0, ftol=1.49012e-10, xtol=1.49012e-4, gtol=0.0, 
+			# 		maxfev=1000, epsfcn=None, factor=1, diag=None,
+			# 		args = (frame_gray, ids, corners, b_edge, edge_intensities_expected, aruco_images, mtx, dist) ) 
+ 
+
+			# 	LM_DPR_DRAW(res_DPR[0], frame_gray_draw, ids, corners,        # drawing points as result of DPR
+			# 				 b_edge, edge_intensities_expected,aruco_images, mtx, dist, 0,1)
+
+			# else :
+			# 	res_DPR = res
+			# print res_DPR[0],"res_DPR[0]"	
+			# print res_DPR[2]["nfev"],"res_DPR[2].nfev"	
+			# print res_DPR[3],"message"
 			pose_marker_with_DPR[j,:] = np.reshape(res_DPR[0],(1,6))
 
 			Tf_cam_ball = RodriguesToTransf(res_DPR[0])
@@ -769,8 +753,11 @@ def main():
 			# temp1 = int(px_sp[0,0,0])
 			# temp2 = int(px_sp[0,0,1])
 			# cv2.circle(frame,(temp1,temp2), 5 , (0,255,255), 2)
-	 
-			print(np.linalg.norm(res[0] - res_DPR[0], 2),"DPR Improvement")
+	 		print res[0].T,"res[0].T"
+	 		print res_DPR[0],"res_DPR[0]"
+	 		print res_DPR[0]-res[0].T,"difference"
+
+			print(np.linalg.norm(res[0].T - res_DPR[0], 2),"DPR Improvement")
 
 			# angle_range = np.arange(-0.5,0.5,0.01)
 			# tra_range = angle_range*10
@@ -806,7 +793,7 @@ def main():
 			# cv2.imshow('frame_gray',frame_gray)
 			# cv2.imshow('aruco_images',aruco_images[ids[0]])
 			# cv2.imshow('frame_color',frame)
-			if cv2.waitKey(1) & 0xFF == ord('q') or j >= iterations_for_while:
+			if cv2.waitKey(0) & 0xFF == ord('q') or j >= iterations_for_while:
 				break
 		else: 
 			print("Required marker not visible")
